@@ -1,8 +1,3 @@
-use std::io::{
-  self,
-  Write
-};
-
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
