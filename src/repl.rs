@@ -156,11 +156,11 @@ pub async fn run_repl()
     Err(e) if e.to_string().contains("invalid date") => {
         // Heuristic: if second argument looks like a date, likely the symbol is missing
         let mut warn = String::new();
-        if parts.get(1).map_or(false, |s| s.chars().all(|c| c.is_ascii_digit() || c == '-')) {
+        if parts.get(1).is_some_and(|s| s.chars().all(|c| c.is_ascii_digit() || c == '-')) {
             warn.push_str("Stock symbol missing or first argument not a ticker. ");
         }
         // Also check which date caused the error
-        if parts.get(3).map_or(false, |s| !s.chars().all(|c| c.is_ascii_digit() || c == '-')) {
+        if parts.get(3).is_some_and(|s| !s.chars().all(|c| c.is_ascii_digit() || c == '-')) {
             warn.push_str(&format!("End date '{}' is not in YYYY-MM-DD format.", parts[3]));
         }
         if warn.is_empty() {

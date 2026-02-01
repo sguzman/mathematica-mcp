@@ -108,11 +108,13 @@ impl AnimalIdGenerator {
       String::new(),
       String::new()
     ];
-    for i in 0..4 {
+    for (i, word) in
+      words.iter_mut().enumerate()
+    {
       let shift = 11 * (3 - i);
       let idx = ((packed >> shift)
         & 0x7ff) as u16; // 0..2047
-      words[i] = index_to_word(idx);
+      *word = index_to_word(idx);
     }
 
     words.join("-")
