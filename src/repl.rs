@@ -21,6 +21,7 @@ pub async fn run_repl() -> anyhow::Result<()> {
     eprintln!();
 
     loop {
+        println!();
         print!("mathematica> ");
         io::stdout().flush()?; // OK in repl mode (not MCP stdio mode)
 
