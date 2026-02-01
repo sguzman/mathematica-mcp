@@ -1,7 +1,8 @@
 ````markdown
-# mathematica-mcp-server
+# Mathematica-Mcp-Server
 
 An MCP (Model Context Protocol) server that exposes a local **Wolfram/Mathematica kernel** over **stdio**, with:
+
 - multi-session kernel management
 - tamper-evident session IDs
 - a safe-ish `FinancialData[...]` helper
@@ -12,9 +13,9 @@ This is intended for MCP hosts like Continue and other stdio-based MCP clients.
 
 ---
 
-## What this server provides
+## What This Server Provides
 
-### Tools (all prefixed with `mathematica.`)
+### Tools (all Prefixed with `mathematica.`)
 
 - `mathematica.create_session`
   - Launch a new kernel session and return a session id.
@@ -27,24 +28,27 @@ This is intended for MCP hosts like Continue and other stdio-based MCP clients.
 - `mathematica.time`
   - Return current local + UTC time (RFC3339).
 - `mathematica.get_finance`
-  - “Sugar syntax” for `FinancialData[...]` that builds valid WL and evaluates it in-session.
+  - “Sugar syntax” for `FinancialData[...]` that builds valid WL and evaluates
+    it in-session.
 
 ---
 
 ## Requirements
 
-### System prerequisites
+### System Prerequisites
+
 - A working Wolfram kernel executable:
   - `WolframKernel` (common) or `MathKernel` (older installs)
-- WSTP must be available on your system (typically installed alongside Mathematica / Wolfram Engine).
+- WSTP must be available on your system (typically installed alongside
+  Mathematica / Wolfram Engine).
 - Rust toolchain (recent stable).
 
-### Notes about licensing / data
+### Notes About Licensing / Data
 `FinancialData[...]` depends on your Wolfram installation and the data sources it can access. Some data requires an active license or network access.
 
 ---
 
-## Installation & build
+## Installation & Build
 
 From the repo directory:
 
@@ -52,25 +56,29 @@ From the repo directory:
   - `cargo build --release`
 
 The output binary will be at:
+
 - `target/release/mathematica-mcp-server`
 
 ---
 
 ## Running
 
-### 1) MCP server mode (stdio)
+### 1) MCP Server Mode (stdio)
 Run:
+
 - `mathematica-mcp-server serve`
 
 This mode is for MCP hosts. **Do not print to stdout** in this mode; MCP stdio uses stdout for protocol traffic. This project logs to **stderr** via `tracing`.
 
-### 2) Local REPL mode (recommended for testing)
+### 2) Local REPL Mode (recommended for Testing)
 Run:
+
 - `mathematica-mcp-server repl`
 
 Inside the REPL you can type the same tool names you’d call from an MCP client:
 
 Example session:
+
 - `mathematica.create_session`
 - `mathematica.execute_code 2+2`
 - `mathematica.time`
@@ -81,9 +89,10 @@ Example session:
 
 ---
 
-## Environment variables
+## Environment Variables
 
-### Required / recommended
+### Required / Recommended
+
 - `ANIMALID_SECRET_KEY`
   - Secret key used to generate and verify tamper-evident session IDs.
   - If not set, a dev default is used (not recommended).
@@ -93,18 +102,21 @@ Example session:
   - If not set, the server will try `WolframKernel` or `MathKernel` on `PATH`.
 
 ### Logging
+
 - `RUST_LOG`
   - Controls verbosity of tracing logs.
   - Examples: `info`, `debug`, `trace`
 - `RUST_BACKTRACE=1`
   - Helpful during debugging.
 
-### Fish examples
+### Fish Examples
+
 ```text
 set -x ANIMALID_SECRET_KEY "your-long-random-secret"
 set -x WOLFRAM_KERNEL_PATH "/usr/local/bin/WolframKernel"
 set -x RUST_LOG "info"
 set -x RUST_BACKTRACE "1"
+```
 ````
 
 ---
@@ -113,7 +125,7 @@ set -x RUST_BACKTRACE "1"
 
 Replace your Python/uv command with either a release binary (recommended) or cargo.
 
-### Option A: Run the compiled release binary (recommended)
+### Option A: Run the Compiled Release Binary (recommended)
 
 ```yaml
 - name: Mathematica (Kernel MCP)
@@ -127,7 +139,7 @@ Replace your Python/uv command with either a release binary (recommended) or car
     RUST_BACKTRACE: "1"
 ```
 
-### Option B: Run via cargo (dev-friendly)
+### Option B: Run via Cargo (dev-Friendly)
 
 ```yaml
 - name: Mathematica (Kernel MCP)
@@ -147,7 +159,7 @@ Replace your Python/uv command with either a release binary (recommended) or car
 
 ---
 
-## Tool details & examples
+## Tool Details & Examples
 
 ### `mathematica.create_session`
 
@@ -204,8 +216,9 @@ Output (example):
 
 Notes:
 
-* Dates must be `YYYY-MM-DD`.
-* If you provide a date range without a `property`, the server defaults the property to `"Close"` so the WL syntax remains valid.
+- Dates must be `YYYY-MM-DD`.
+- If you provide a date range without a `property`, the server defaults the
+  property to `"Close"` so the WL syntax remains valid.
 
 ### `mathematica.list_sessions`
 
@@ -235,43 +248,44 @@ Returns:
 
 ---
 
-## Architecture (how it works)
+## Architecture (how It Works)
 
-* **Session manager** maintains multiple sessions.
-* Each session runs the Wolfram kernel behind a **WSTP Link**.
-* Each session Link lives on its **own OS thread** (so we never require `Link: Send`).
-* Tool calls communicate with session threads via channels.
-* Session IDs are:
+- **Session manager** maintains multiple sessions.
+- Each session runs the Wolfram kernel behind a **WSTP Link**.
+- Each session Link lives on its **own OS thread** (so we never require
+  `Link: Send`).
+- Tool calls communicate with session threads via channels.
+- Session IDs are:
 
-  * human-friendly (adjective_animal tokens)
-  * tamper-evident via a small HMAC-derived checksum embedded in the words
+  - human-friendly (adjective_animal tokens)
+  - tamper-evident via a small HMAC-derived checksum embedded in the words
 
 ---
 
 ## Troubleshooting
 
-### “Kernel not found” / failing to launch
+### “Kernel Not Found” / Failing to Launch
 
-* Set `WOLFRAM_KERNEL_PATH` explicitly to your kernel executable.
-* Verify the kernel path is executable.
+- Set `WOLFRAM_KERNEL_PATH` explicitly to your kernel executable.
+- Verify the kernel path is executable.
 
-### `FinancialData[...]` returns errors
+### `FinancialData[...]` Returns Errors
 
-* This is often due to:
+- This is often due to:
 
-  * missing data access
-  * licensing limitations
-  * lack of network connectivity
-* Try evaluating a simpler query first:
+  - missing data access
+  - licensing limitations
+  - lack of network connectivity
+- Try evaluating a simpler query first:
 
-  * `mathematica.execute_code FinancialData["AAPL"]`
+  - `mathematica.execute_code FinancialData["AAPL"]`
 
-### MCP host gets corrupted output / protocol errors
+### MCP Host Gets Corrupted Output / Protocol Errors
 
-* Ensure the server is not printing to stdout.
-* Keep logs on stderr (this project does).
+- Ensure the server is not printing to stdout.
+- Keep logs on stderr (this project does).
 
-### Increase logging
+### Increase Logging
 
 ```text
 set -x RUST_LOG "debug"
@@ -279,11 +293,12 @@ set -x RUST_LOG "debug"
 
 ---
 
-## Security notes
+## Security Notes
 
-* Treat `ANIMALID_SECRET_KEY` like an application secret.
-* Session IDs are designed to be tamper-evident, not cryptographically private.
-* This server evaluates arbitrary Wolfram Language code in the kernel. Only run it in environments you trust.
+- Treat `ANIMALID_SECRET_KEY` like an application secret.
+- Session IDs are designed to be tamper-evident, not cryptographically private.
+- This server evaluates arbitrary Wolfram Language code in the kernel. Only run
+  it in environments you trust.
 
 ---
 
@@ -291,7 +306,7 @@ set -x RUST_LOG "debug"
 
 CC0-1.0 (public domain dedication).
 
-```
+```text
 
 If you want, paste your current repo tree (or just `Cargo.toml` + `src/` filenames), and I’ll tailor the README’s paths/commands to exactly match what you’ve actually got (binary name, tool list, and any extra tools you kept from the Python version).
 ::contentReference[oaicite:0]{index=0}

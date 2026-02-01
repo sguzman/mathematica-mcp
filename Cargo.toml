@@ -1,28 +1,50 @@
 [package]
-name = "mathematica-mcp"
-version = "0.1.0"
 edition = "2024"
 license = "MIT"
+name    = "mathematica-mcp"
+version = "0.1.0"
 
 [dependencies]
 anyhow = "1.0"
-chrono = { version = "0.4", features = ["clock"] }
-clap = { version = "4.5", features = ["derive"] }
+chrono = { features = [
+  "clock",
+], version = "0.4" }
+clap = { features = [
+  "derive",
+], version = "4.5" }
 flume = "0.11"
 hmac = "0.12"
 rand = "0.9"
-rmcp = { version = "0.14", features = ["macros", "server", "transport-io"] }
-schemars = { version = "1.0", features = ["derive"] }
-serde = { version = "1", features = ["derive"] }
+rmcp = { features = [
+  "macros",
+  "server",
+  "transport-io",
+], version = "0.14" }
+schemars = { features = [
+  "derive",
+], version = "1.0" }
+serde = { features = [
+  "derive",
+], version = "1" }
 serde_json = "1"
 sha2 = "0.10"
-tokio = { version = "1.49", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { features = [
+  "macros",
+  "rt-multi-thread",
+  "sync",
+  "time",
+], version = "1.49" }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { features = [
+  "env-filter",
+  "fmt",
+], version = "0.3" }
 
-rustyline = { version = "17.0.2", default-features = true }
-uuid = { version = "1", features = ["v4"] }
+rustyline = { default-features = true, version = "17.0.2" }
+uuid = { features = [
+  "v4",
+], version = "1" }
 
 # Wolfram kernel integration (WSTP)
-wstp = "0.2.9"
 wolfram-expr = "0.1"
+wstp         = "0.2.9"
