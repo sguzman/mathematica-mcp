@@ -5,7 +5,7 @@ mod session_id;
 mod wolfram;
 
 use clap::{Parser, Subcommand};
-use tracing::{Level, info};
+use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]

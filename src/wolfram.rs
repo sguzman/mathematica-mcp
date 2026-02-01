@@ -1,8 +1,10 @@
 use anyhow::{anyhow, Context};
+use chrono::Datelike;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use wolfram_expr::{Expr, Symbol};
+use wolfram_expr::{Expr, ExprKind, Symbol};
+use wstp::kernel::WolframKernelProcess;
 use wstp::Link;
 
 pub fn resolve_kernel_cmd() -> anyhow::Result<String> {
@@ -32,31 +34,28 @@ pub fn resolve_kernel_cmd() -> anyhow::Result<String> {
     Ok("WolframKernel".to_string())
 }
 
-pub fn launch_link(kernel_cmd: &str) -> anyhow::Result<Link> {
-    // WSTP "open string" to launch a kernel:
-    //   -linkmode launch -linkname "<kernel_cmd> -wstp"
-    //
-    // The linkname part needs quoting so paths with spaces survive.
-    let link_str = format!("-linkmode launch -linkname \"{} -wstp\"", kernel_cmd);
-    tracing::debug!(%link_str, "opening WSTP link");
-    let link = Link::open(&link_str).map_err(|e| anyhow!("WSTP Link::open failed: {e:?}"))?;
-    Ok(link)
+pub fn launch_link(kernel_cmd: &str) -> anyhow::Result<WolframKernelProcess> {
+    let path = PathBuf::from(kernel_cmd);
+    tracing::debug!(kernel_path = %path.display(), "launching Wolfram kernel");
+    let kernel =
+        WolframKernelProcess::launch(&path).map_err(|e| anyhow!("WSTP launch failed: {e:?}"))?;
+    Ok(kernel)
 }
 
 pub fn eval_to_string(link: &mut Link, code: &str) -> anyhow::Result<String> {
     // Build: ToString[ReleaseHold[ToExpression[code, InputForm, HoldComplete]], InputForm]
     let to_expr = Expr::normal(
-        Symbol::new("ToExpression"),
+        Symbol::new("System`ToExpression"),
         vec![
             Expr::string(code),
-            Expr::symbol("InputForm"),
-            Expr::symbol("HoldComplete"),
+            Expr::symbol(Symbol::new("System`InputForm")),
+            Expr::symbol(Symbol::new("System`HoldComplete")),
         ],
     );
-    let release = Expr::normal(Symbol::new("ReleaseHold"), vec![to_expr]);
+    let release = Expr::normal(Symbol::new("System`ReleaseHold"), vec![to_expr]);
     let expr = Expr::normal(
-        Symbol::new("ToString"),
-        vec![release, Expr::symbol("InputForm")],
+        Symbol::new("System`ToString"),
+        vec![release, Expr::symbol(Symbol::new("System`InputForm"))],
     );
 
     link.put_eval_packet(&expr)
@@ -81,8 +80,8 @@ pub fn eval_to_string(link: &mut Link, code: &str) -> anyhow::Result<String> {
                 .map_err(|e| anyhow!("new_packet failed: {e:?}"))?;
 
             // Extract string if possible, otherwise fall back to expr formatting.
-            if let Expr::String(s) = result_expr {
-                return Ok(s);
+            if let ExprKind::String(s) = result_expr.kind() {
+                return Ok(s.clone());
             }
             return Ok(format!("{result_expr:?}"));
         }

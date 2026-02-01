@@ -16,7 +16,7 @@
 //! without needing to append a signature string.
 
 use hmac::{Hmac, Mac};
-use rand::RngCore;
+use rand::TryRngCore;
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -113,7 +113,8 @@ impl AnimalIdGenerator {
 fn random_u32() -> u32 {
     let mut rng = rand::rngs::OsRng;
     let mut buf = [0u8; 4];
-    rng.fill_bytes(&mut buf);
+    rng.try_fill_bytes(&mut buf)
+        .expect("os rng should be available");
     u32::from_be_bytes(buf)
 }
 

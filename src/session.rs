@@ -4,6 +4,7 @@ use crate::wolfram;
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use flume::Sender;
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::thread;
@@ -32,7 +33,7 @@ pub struct SessionManager {
     inner: std::sync::Arc<tokio::sync::Mutex<HashMap<String, SessionHandle>>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct SessionInfo {
     pub session_id: String,
     pub created_at_utc: String,
@@ -59,23 +60,24 @@ impl SessionManager {
 
         let join = thread::spawn(move || {
             // Create link *inside* the thread.
-            let mut link = match wolfram::launch_link(&kernel_cmd) {
-                Ok(l) => {
+            let mut kernel = match wolfram::launch_link(&kernel_cmd) {
+                Ok(k) => {
                     let _ = ready_tx.send(Ok(()));
-                    l
+                    k
                 }
                 Err(e) => {
                     let _ = ready_tx.send(Err(e));
                     return;
                 }
             };
+            let link = kernel.link();
 
             tracing::info!("session thread started");
 
             while let Ok(req) = rx.recv() {
                 match req {
                     SessionRequest::Eval { code, reply } => {
-                        let res = wolfram::eval_to_string(&mut link, &code);
+                        let res = wolfram::eval_to_string(link, &code);
                         let _ = reply.send(res);
                     }
                     SessionRequest::Shutdown { reply } => {

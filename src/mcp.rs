@@ -2,23 +2,23 @@ use crate::session::SessionManager;
 use crate::wolfram;
 
 use chrono::Local;
+use rmcp::handler::server::{router::tool::ToolRouter, wrapper::Parameters, ServerHandler};
 use rmcp::model::{ServerCapabilities, ServerInfo};
-use rmcp::service::{RequestContext, Role, Service};
-use rmcp::transport::stdio::stdio;
-use rmcp::{
-    handler::server::ServerHandler, model::Json, schemars, serde, tool, tool_handler, tool_router,
-};
+use rmcp::transport::stdio;
+use rmcp::{serve_server, tool, tool_handler, tool_router, Json};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone)]
 pub struct MathematicaServer {
     sessions: SessionManager,
+    tool_router: ToolRouter<Self>,
 }
 
 impl MathematicaServer {
     pub fn new() -> Self {
         Self {
             sessions: SessionManager::new(),
+            tool_router: Self::tool_router(),
         }
     }
 }
@@ -36,7 +36,10 @@ impl MathematicaServer {
     }
 
     #[tool(name = "mathematica.execute_code")]
-    async fn execute_code(&self, params: ExecuteParams) -> Result<Json<ExecuteResult>, String> {
+    async fn execute_code(
+        &self,
+        Parameters(params): Parameters<ExecuteParams>,
+    ) -> Result<Json<ExecuteResult>, String> {
         if !self.sessions.verify(&params.session_id) {
             return Err("Invalid session ID (malformed or tampered).".to_string());
         }
@@ -57,7 +60,7 @@ impl MathematicaServer {
     #[tool(name = "mathematica.close_session")]
     async fn close_session(
         &self,
-        params: CloseSessionParams,
+        Parameters(params): Parameters<CloseSessionParams>,
     ) -> Result<Json<CloseSessionResult>, String> {
         if !self.sessions.verify(&params.session_id) {
             return Err("Invalid session ID.".to_string());
@@ -88,7 +91,10 @@ impl MathematicaServer {
     }
 
     #[tool(name = "mathematica.get_finance")]
-    async fn get_finance(&self, params: FinanceParams) -> Result<Json<FinanceResult>, String> {
+    async fn get_finance(
+        &self,
+        Parameters(params): Parameters<FinanceParams>,
+    ) -> Result<Json<FinanceResult>, String> {
         if !self.sessions.verify(&params.session_id) {
             return Err("Invalid session ID.".to_string());
         }
@@ -117,7 +123,7 @@ impl MathematicaServer {
     }
 }
 
-#[tool_handler]
+#[tool_handler(router = self.tool_router)]
 impl ServerHandler for MathematicaServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
@@ -125,7 +131,7 @@ impl ServerHandler for MathematicaServer {
             instructions: Some(
                 "Mathematica/Wolfram MCP server. Use mathematica.create_session, then mathematica.execute_code / mathematica.get_finance, then mathematica.close_session.".to_string()
             ),
-            capabilities: ServerCapabilities::default(),
+            capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()
         }
     }
@@ -189,11 +195,10 @@ pub struct FinanceResult {
 
 pub async fn run_server() -> anyhow::Result<()> {
     let server = MathematicaServer::new();
-    let service = Service::new(server);
 
     // Serve over stdio.
     let transport = stdio();
-    let running = service.serve(transport).await?;
+    let running = serve_server(server, transport).await?;
     running.waiting().await?;
 
     Ok(())
