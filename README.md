@@ -1,7 +1,7 @@
-````markdown
 # Mathematica-Mcp-Server
 
-An MCP (Model Context Protocol) server that exposes a local **Wolfram/Mathematica kernel** over **stdio**, with:
+An MCP (Model Context Protocol) server that exposes a local
+**Wolfram/Mathematica kernel** over **stdio**, with:
 
 - multi-session kernel management
 - tamper-evident session IDs
@@ -44,7 +44,9 @@ This is intended for MCP hosts like Continue and other stdio-based MCP clients.
 - Rust toolchain (recent stable).
 
 ### Notes About Licensing / Data
-`FinancialData[...]` depends on your Wolfram installation and the data sources it can access. Some data requires an active license or network access.
+
+`FinancialData[...]` depends on your Wolfram installation and the data sources
+it can access. Some data requires an active license or network access.
 
 ---
 
@@ -63,14 +65,17 @@ The output binary will be at:
 
 ## Running
 
-### 1) MCP Server Mode (stdio)
+### 1. MCP Server Mode (stdio)
+
 Run:
 
 - `mathematica-mcp-server serve`
 
-This mode is for MCP hosts. **Do not print to stdout** in this mode; MCP stdio uses stdout for protocol traffic. This project logs to **stderr** via `tracing`.
+This mode is for MCP hosts. **Do not print to stdout** in this mode; MCP stdio
+uses stdout for protocol traffic. This project logs to **stderr** via `tracing`.
 
-### 2) Local REPL Mode (recommended for Testing)
+### 2. Local REPL Mode (recommended for Testing)
+
 Run:
 
 - `mathematica-mcp-server repl`
@@ -117,20 +122,23 @@ set -x WOLFRAM_KERNEL_PATH "/usr/local/bin/WolframKernel"
 set -x RUST_LOG "info"
 set -x RUST_BACKTRACE "1"
 ```
-````
+
+
+````text
 
 ---
 
 ## Using with Continue (config.yaml)
 
-Replace your Python/uv command with either a release binary (recommended) or cargo.
+Replace your Python/uv command with either a release binary (recommended) or
+cargo.
 
 ### Option A: Run the Compiled Release Binary (recommended)
 
 ```yaml
 - name: Mathematica (Kernel MCP)
-  command: /home/admin/Code/mcp/mathematica_mcp/target/release/mathematica-mcp-server
-  args:
+command:
+/home/admin/Code/mcp/mathematica_mcp/target/release/mathematica-mcp-server args:
     - serve
   env:
     ANIMALID_SECRET_KEY: "..."
@@ -207,11 +215,9 @@ Input:
 Output (example):
 
 ```json
-{
-  "wolfram_code": "FinancialData[\"AAPL\",\"Close\",{DateObject[{2025,1,1}], DateObject[{2025,2,1}]},\"Day\"]",
-  "output": "{...}",
-  "elapsed_ms": 45
-}
+{ "wolfram_code": "FinancialData
+[\"AAPL\",\"Close\",{DateObject[{2025,1,1}], DateObject[{2025,2,1}]},\"Day\"]",
+"output": "{...}", "elapsed_ms": 45}
 ```
 
 Notes:
@@ -308,6 +314,8 @@ CC0-1.0 (public domain dedication).
 
 ```text
 
-If you want, paste your current repo tree (or just `Cargo.toml` + `src/` filenames), and I’ll tailor the README’s paths/commands to exactly match what you’ve actually got (binary name, tool list, and any extra tools you kept from the Python version).
-::contentReference[oaicite:0]{index=0}
+If you want, paste your current repo tree (or just `Cargo.toml` + `src/`
+filenames), and I’ll tailor the README’s paths/commands to exactly match what
+you’ve actually got (binary name, tool list, and any extra tools you kept from
+the Python version). ::contentReference [oaicite:0]{index=0}
 ```
