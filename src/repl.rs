@@ -81,8 +81,11 @@ pub async fn run_repl()
     let readline =
       rl.readline("mathematica> ");
     match readline {
-      | Ok(line) => {
-        let line = line.trim();
+      | Ok(line_string) => {
+        if let Err(err) = rl.add_history_entry(line_string.as_str()) {
+          eprintln!("WARN: failed to record history entry: {err:?}");
+        }
+        let line = line_string.trim();
         if line.is_empty() {
           continue;
         }
