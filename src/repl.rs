@@ -1,20 +1,30 @@
-use rustyline::DefaultEditor;
-use rustyline::error::ReadlineError;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 
+use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
+
 use crate::session::SessionManager;
 use crate::wolfram;
 
-pub async fn run_repl() -> anyhow::Result<()> {
+pub async fn run_repl()
+-> anyhow::Result<()> {
   let sessions = SessionManager::new();
   let mut active: Option<String> = None;
 
-  let history_dir = PathBuf::from(".cache");
+  let history_dir =
+    PathBuf::from(".cache");
   fs::create_dir_all(&history_dir)
-    .map_err(|e| anyhow::anyhow!("failed to create history directory: {e:?}"))?;
-  let history_path = history_dir.join("mathematica_repl_history.txt");
+    .map_err(|e| {
+      anyhow::anyhow!(
+        "failed to create history \
+         directory: {e:?}"
+      )
+    })?;
+  let history_path = history_dir.join(
+    "mathematica_repl_history.txt"
+  );
   eprintln!(
     "mathematica-mcp-server repl"
   );
@@ -53,9 +63,17 @@ pub async fn run_repl() -> anyhow::Result<()> {
     })?;
 
   match rl.load_history(&history_path) {
-    Ok(_) => {}
-    Err(ReadlineError::Io(io_err)) if io_err.kind() == ErrorKind::NotFound => {}
-    Err(err) => return Err(anyhow::anyhow!("failed to load history: {err:?}")),
+    | Ok(_) => {}
+    | Err(ReadlineError::Io(
+      io_err
+    )) if io_err.kind()
+      == ErrorKind::NotFound => {}
+    | Err(err) => {
+      return Err(anyhow::anyhow!(
+        "failed to load history: \
+         {err:?}"
+      ))
+    }
   }
 
   loop {
@@ -268,8 +286,13 @@ pub async fn run_repl() -> anyhow::Result<()> {
     }
   }
 
-  if let Err(save_err) = rl.save_history(&history_path) {
-    eprintln!("WARN: failed to save REPL history: {save_err:?}");
+  if let Err(save_err) =
+    rl.save_history(&history_path)
+  {
+    eprintln!(
+      "WARN: failed to save REPL \
+       history: {save_err:?}"
+    );
   }
 
   Ok(())
