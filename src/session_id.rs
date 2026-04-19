@@ -23,77 +23,34 @@
 //! `.verify()` without needing to
 //! append a signature string.
 
-use hmac::{
-  Hmac,
-  Mac
-};
 use rand::TryRngCore;
-use sha2::Sha256;
 
-type HmacSha256 = Hmac<Sha256>;
-
-pub const ENV_SECRET_KEY: &str = "ANIMALID_SECRET_KEY";
-pub const DEFAULT_SECRET_KEY: &str = "default-secret-key-for-dev";
-
-/// This is intentionally named to match
-/// the Python library semantics.
-///
-/// The rest of the Rust code can keep
-/// calling:
-/// - `SessionIdSigner::from_env()`
-/// - `SessionIdSigner::generate()`
-/// - `SessionIdSigner::verify(id)`
 pub type SessionIdSigner = AnimalIdGenerator;
 
-#[derive(Clone, Debug)]
-pub struct AnimalIdGenerator {
-  key: Vec<u8>
-}
+#[derive(Clone, Debug, Default)]
+pub struct AnimalIdGenerator {}
 
 impl AnimalIdGenerator {
-  /// Load the secret key from
-  /// `ANIMALID_SECRET_KEY` or fall back
-  /// to a dev default.
   pub fn from_env() -> Self {
-    let secret = std::env::var(ENV_SECRET_KEY).unwrap_or_else(|_| DEFAULT_SECRET_KEY.to_string());
-
-    if secret == DEFAULT_SECRET_KEY {
-      tracing::warn!("Using default {ENV_SECRET_KEY}. Set {ENV_SECRET_KEY} for production.");
-    }
-
-    Self {
-      key: secret.into_bytes()
-    }
+    Self {}
   }
 
-  /// Generate a new tamper-evident
-  /// session id.
+  /// Generate a new session id.
   pub fn generate(&self) -> String {
-    // 32-bit random payload
-    let payload = random_u32();
-
-    // 12-bit checksum (HMAC over
-    // payload)
-    let checksum12 = self.checksum12(payload);
-
-    // Pack into 44 bits: [payload32 |
-    // checksum12]
-    let packed: u64 = ((payload as u64) << 12) | (checksum12 as u64);
-
-    // Split into 4 chunks of 11 bits
-    // (most-significant chunk first)
+    let mut rng = rand::rngs::OsRng;
     let mut words = [String::new(), String::new(), String::new(), String::new()];
-    for (i, word) in words.iter_mut().enumerate() {
-      let shift = 11 * (3 - i);
-      let idx = ((packed >> shift) & 0x7ff) as u16; // 0..2047
+
+    for word in &mut words {
+      let mut buf = [0u8; 2];
+      rng.try_fill_bytes(&mut buf).expect("os rng should be available");
+      let idx = (u16::from_be_bytes(buf) & 0x7ff) as u16; // 0..2047
       *word = index_to_word(idx);
     }
 
     words.join("-")
   }
 
-  /// Verify that a session id is
-  /// well-formed and untampered.
+  /// Verify that a session id is well-formed.
   pub fn verify(
     &self,
     session_id: &str
@@ -103,47 +60,16 @@ impl AnimalIdGenerator {
       return false;
     }
 
-    // Decode 4 x 11-bit indices back
-    // into packed 44-bit value
-    let mut packed: u64 = 0;
     for part in parts {
-      let Some(idx) = word_to_index(part) else {
+      if word_to_index(part).is_none() {
         return false;
-      };
-      packed = (packed << 11) | (idx as u64);
+      }
     }
 
-    // Unpack: [payload32 | checksum12]
-    let payload = (packed >> 12) as u32;
-    let checksum = (packed & 0x0fff) as u16;
-
-    // Recompute and compare
-    self.checksum12(payload) == checksum
-  }
-
-  fn checksum12(
-    &self,
-    payload: u32
-  ) -> u16 {
-    let mut mac = HmacSha256::new_from_slice(&self.key).expect("HMAC accepts any key length");
-    mac.update(&payload.to_be_bytes());
-    let digest = mac.finalize().into_bytes();
-
-    // Take the top 12 bits of the first
-    // 2 bytes as checksum
-    // Example: bytes = ab cd ->
-    // checksum = (ab cd) >> 4
-    let hi16 = ((digest[0] as u16) << 8) | (digest[1] as u16);
-    hi16 >> 4
+    true
   }
 }
 
-fn random_u32() -> u32 {
-  let mut rng = rand::rngs::OsRng;
-  let mut buf = [0u8; 4];
-  rng.try_fill_bytes(&mut buf).expect("os rng should be available");
-  u32::from_be_bytes(buf)
-}
 
 /// We need a 2048-entry "wordlist"
 /// (because each word encodes 11 bits).
@@ -198,43 +124,16 @@ fn word_to_index(word: &str) -> Option<u16> {
 mod tests {
   use super::*;
 
-  fn gen_with_key(key: &str) -> AnimalIdGenerator {
-    AnimalIdGenerator {
-      key: key.as_bytes().to_vec()
-    }
-  }
-
   #[test]
   fn generate_then_verify_ok() {
-    let g = gen_with_key("test-secret");
+    let g = AnimalIdGenerator::default();
     let id = g.generate();
     assert!(g.verify(&id), "generated id should verify: {id}");
   }
 
   #[test]
-  fn tamper_one_char_fails() {
-    let g = gen_with_key("test-secret");
-    let mut id = g.generate();
-    assert!(g.verify(&id));
-
-    // mutate the last char in the
-    // string (guaranteed to change
-    // something)
-    let last = id.pop().unwrap();
-    id.push(
-      if last == 'a' {
-        'b'
-      } else {
-        'a'
-      }
-    );
-
-    assert!(!g.verify(&id), "tampered id must fail: {id}");
-  }
-
-  #[test]
   fn wrong_format_fails() {
-    let g = gen_with_key("test-secret");
+    let g = AnimalIdGenerator::default();
     assert!(!g.verify("not-even-close"));
     assert!(!g.verify("a_b-c_d")); // only 2 words, should be 4
     assert!(!g.verify("alert_fox-ancient_wolf-brave_bear")); // 3 words
@@ -242,7 +141,7 @@ mod tests {
 
   #[test]
   fn unknown_word_fails() {
-    let g = gen_with_key("test-secret");
+    let g = AnimalIdGenerator::default();
     assert!(!g.verify("alert_fox-ancient_wolf-brave_bear-unknown_animal"));
   }
 }
