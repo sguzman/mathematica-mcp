@@ -87,18 +87,6 @@ fn main() {
         _ => WOLFRAM_VERSION,
     };
 
-    // TODO: Make use of pre-generated bindings useable via a feature flag?
-    //       Using pre-generated bindings seems to currently only have a distinct
-    //       advantage over compile-time-generated bindings when building on
-    //       docs.rs, where the WSTP SDK is not available.
-    //
-    //       In other situations, using pre-generated bindings doesn't offer the
-    //       advantage of not needing the WSTP SDK available locally, because you
-    //       still need to link against the WSTP static library.
-    //
-    //       NOTE: Pre-generated bindings have the advantage of working when
-    //             libclang is not available (which bindgen requires), which
-    //             happens e.g. in Windows CI/CD builds.
     let bindings_path = use_pregenerated_bindings(wolfram_version, target_system_id);
 
     println!(
@@ -121,8 +109,6 @@ fn use_pregenerated_bindings(
     wolfram_version: WolframVersion,
     target_system_id: SystemID,
 ) -> PathBuf {
-    // FIXME: Check that this file actually exists, and generate a nicer error if it
-    //        doesn't.
     let bindings_path = make_bindings_path(&wolfram_version, target_system_id);
 
     println!("cargo:rerun-if-changed={}", bindings_path.display());
@@ -176,26 +162,25 @@ fn make_bindings_path(wolfram_version: &WolframVersion, system_id: SystemID) -> 
 /// and also links the WSTP interface libraries (the libraries that WSTP itself
 /// depends on).
 fn link_to_wstp(app: Option<&WolframApp>, target: &str) {
-    // Path to the WSTP static library file.
-    let static_lib = if target.contains("windows") && app.is_none() {
+    // Path to the WSTP library file.
+    let lib_path = if target.contains("windows") && app.is_none() {
         let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        // Try WSTP_WINDOWS_SDK_PATH or fallback to main project's wstp-sdk-windows
         let sdk_path = std::env::var("WSTP_WINDOWS_SDK_PATH").map(PathBuf::from).unwrap_or_else(|_| {
             manifest_dir.parent().unwrap().join("wstp-sdk-windows")
         });
         
-        let lib = sdk_path.join("wstpi4.lib");
-        if !lib.exists() {
-             // Try another common name
-             let lib2 = sdk_path.join("wstp64i4.lib");
-             if lib2.exists() {
-                 lib2
-             } else {
-                 panic!("Could not find wstpi4.lib or wstp64i4.lib in {}", sdk_path.display());
-             }
-        } else {
-             lib
+        // For dynamic linking on Windows, we need the import library (.lib)
+        let candidates = ["wstp64i4.lib", "wstpi4.lib"];
+        let mut found = None;
+        for c in candidates {
+            let p = sdk_path.join(c);
+            if p.exists() {
+                found = Some(p);
+                break;
+            }
         }
+        
+        found.expect(&format!("Could not find WSTP import library (wstp64i4.lib) in {}", sdk_path.display()))
     } else {
         wolfram_app_discovery::build_scripts::wstp_static_library_path(app)
             .expect("unable to get WSTP static library path")
@@ -203,52 +188,18 @@ fn link_to_wstp(app: Option<&WolframApp>, target: &str) {
     };
 
     println!(
-        "cargo:warning=info: linking to WSTP static lib from: {}",
-        static_lib.display()
+        "cargo:warning=info: linking to WSTP lib from: {}",
+        lib_path.display()
     );
 
-    link_wstp_statically(&static_lib, target);
-
-    //
-    // Link to the C++ standard library, required by WSTP
-    //
-
-    // Note: This is now handled by the `link-cplusplus` crate dependency.
-
-    // Note: This blog post explained this, and that this might need to change on Linux.
-    //         https://flames-of-code.netlify.com/blog/rust-and-cmake-cplusplus/
-    // println!("cargo:rustc-link-lib=dylib=c++");
-
-    //-----------------------------------
-    // Link to WSTP "interface" libraries
-    //-----------------------------------
-
-    // The CompilerAdditions/WSTP-targets.cmake file describes the dependencies
-    // of the WSTP library that must be linked into the final artifact for any
-    // code that depends on WSTP. (The contents of that file differ on each
-    // platform). They are the `INTERFACE_LINK_LIBRARIES` of the
-    // `WSTP::STATIC_LIBRARY` CMake target.
-    //
-    // On macOS, the Foundation framework is the only dependency. On Windows,
-    // several system libraries must be linked.
-    //
-    // FIXME: Update this logic to cover the Linux interface libraries.
-
-    //
-    // macOS
-    //
-
-    // TODO: Look at the complete list of CMake libraries required by WSTP and update this
-    //       logic for Windows and Linux.
-    if target.contains("apple-darwin") {
-        println!("cargo:rustc-link-lib=framework=Foundation");
-    }
-
-    //
-    // Windows
-    //
+    let search_dir = lib_path.parent().unwrap().display().to_string();
+    println!("cargo:rustc-link-search=native={}", search_dir);
 
     if target.contains("windows") {
+        let stem = lib_path.file_stem().unwrap().to_str().unwrap();
+        // Use DYNAMIC linking for Windows to avoid C++ ABI issues with static libs
+        println!("cargo:rustc-link-lib=dylib={}", stem);
+        
         println!("cargo:rustc-link-lib=dylib=kernel32");
         println!("cargo:rustc-link-lib=dylib=user32");
         println!("cargo:rustc-link-lib=dylib=advapi32");
@@ -256,14 +207,16 @@ fn link_to_wstp(app: Option<&WolframApp>, target: &str) {
         println!("cargo:rustc-link-lib=dylib=ws2_32");
         println!("cargo:rustc-link-lib=dylib=wsock32");
         println!("cargo:rustc-link-lib=dylib=rpcrt4");
-    }
-
-    //
-    // Linux
-    //
-
-    if target.contains("linux") {
-        println!("cargo:rustc-link-lib=uuid")
+    } else {
+        // Fallback for other platforms (usually static)
+        link_wstp_statically(&lib_path, target);
+        
+        if target.contains("apple-darwin") {
+            println!("cargo:rustc-link-lib=framework=Foundation");
+        }
+        if target.contains("linux") {
+            println!("cargo:rustc-link-lib=uuid")
+        }
     }
 }
 
@@ -278,41 +231,20 @@ fn link_wstp_statically(lib: &PathBuf, target: &str) {
         }
     }
 
-    link_library_file(lib);
+    let stem = lib.file_stem().unwrap().to_str().unwrap();
+    // Trim the 'lib' prefix if it exists, as rustc adds it back.
+    let link_name = stem.trim_start_matches("lib");
+    println!("cargo:rustc-link-lib=static={}", link_name);
 }
 
-/* NOTE:
-    This code was necessary prior to 12.1, where the versions of WSTP in the
-    Mathematica layout were univeral binaries containing 32-bit and 64-bit copies of
-    the libary. However, it appears that starting with 12.1, the layout build of
-    libWSTP is no longer a "fat" archive. (This is possibly due to the fact that macOS
-    Catalina, released ~6 months prior, and dropped support for 32-bit applications on
-    macOS.)
-
-    I'm electing to leave this code around in the meantime, in case the situation
-    changes, but it appears this `lipo` operation may no longer be necessary.
-
-    Update: This code is still useful, because the advent of ARM macOS machines means
-            that local development builds of WSTP will build universal x86_64 and
-            arm64 binaries by default on macOS.
-*/
-/// Use the macOS `lipo` command to construct an x86_64 archive file from the WSTPi4.a
-/// file in the Mathematica layout. This is necessary as a workaround to a bug in the
-/// Rust compiler at the moment: https://github.com/rust-lang/rust/issues/50220.
-/// The problem is that WSTPi4.a is a so called "universal binary"; it's an archive
-/// file with multiple copies of the same library, each for a different target
-/// architecture. The `lipo -thin` command creates a new archive which contains just
-/// the library for the named architecture.
 fn lipo_native_library(wstp_lib: &PathBuf, lipo_arch: &str) -> PathBuf {
-    let wstp_lib = wstp_lib
+    let wstp_lib_str = wstp_lib
         .to_str()
         .expect("could not convert WSTP archive path to str");
 
-    // `lipo` will return an error if run on a non-universal binary, so avoid doing
-    // that by using the `file` command to check the type of `wstp_lib`.
     let is_universal_binary = {
         let stdout = process::Command::new("file")
-            .args(&[wstp_lib])
+            .args(&[wstp_lib_str])
             .output()
             .expect("failed to run `file` system utility")
             .stdout;
@@ -324,14 +256,13 @@ fn lipo_native_library(wstp_lib: &PathBuf, lipo_arch: &str) -> PathBuf {
         return PathBuf::from(wstp_lib);
     }
 
-    // Place the lipo'd library file in the system temporary directory.
     let output_lib = std::env::temp_dir().join("libWSTP-thin.a");
-    let output_lib = output_lib
+    let output_lib_str = output_lib
         .to_str()
         .expect("could not convert WSTP archive path to str");
 
     let output = process::Command::new("lipo")
-        .args(&[wstp_lib, "-thin", lipo_arch, "-output", output_lib])
+        .args(&[wstp_lib_str, "-thin", lipo_arch, "-output", output_lib_str])
         .output()
         .expect("failed to invoke macOS `lipo` command");
 
@@ -340,22 +271,4 @@ fn lipo_native_library(wstp_lib: &PathBuf, lipo_arch: &str) -> PathBuf {
     }
 
     PathBuf::from(output_lib)
-}
-
-fn link_library_file(libfile: PathBuf) {
-    let search_dir = libfile.parent().unwrap().display().to_string();
-
-    let libname = libfile
-        .file_stem()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .trim_start_matches("lib");
-    println!("cargo:rustc-link-search={}", search_dir);
-    
-    if libname.ends_with(".lib") || libfile.extension().and_then(|s| s.to_str()) == Some("lib") {
-         println!("cargo:rustc-link-lib=static={}", libname.trim_end_matches(".lib"));
-    } else {
-         println!("cargo:rustc-link-lib=static={}", libname);
-    }
 }
