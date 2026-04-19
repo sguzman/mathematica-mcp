@@ -18,14 +18,14 @@ pub async fn run_repl() -> anyhow::Result<()> {
   let history_path = history_dir.join("mathematica_repl_history.txt");
   eprintln!("mathematica-mcp-server repl");
   eprintln!("Commands:");
-  eprintln!("  mathematica.create_session");
-  eprintln!("  mathematica.list_sessions");
-  eprintln!("  mathematica.time");
-  eprintln!("  mathematica.execute_code <Wolfram Language code...>");
+  eprintln!("  mathematica_create_session");
+  eprintln!("  mathematica_list_sessions");
+  eprintln!("  mathematica_time");
+  eprintln!("  mathematica_execute_code <Wolfram Language code...>");
   eprintln!(
-    "  mathematica.get_finance <SYMBOL> [PROPERTY] [START YYYY-MM-DD] [END YYYY-MM-DD] [INTERVAL]"
+    "  mathematica_get_finance <SYMBOL> [PROPERTY] [START YYYY-MM-DD] [END YYYY-MM-DD] [INTERVAL]"
   );
-  eprintln!("  mathematica.close_session [SESSION_ID]");
+  eprintln!("  mathematica_close_session [SESSION_ID]");
   eprintln!("  exit | quit");
   eprintln!();
 
@@ -54,29 +54,29 @@ pub async fn run_repl() -> anyhow::Result<()> {
           break;
         }
 
-        if line == "mathematica.create_session" {
+        if line == "mathematica_create_session" {
           let id = sessions.create_session().await?;
           eprintln!("OK session_id={id}");
           active = Some(id);
           continue;
         }
 
-        if line == "mathematica.list_sessions" {
+        if line == "mathematica_list_sessions" {
           let list = sessions.list_sessions().await;
           eprintln!("{}", serde_json::to_string_pretty(&list)?);
           continue;
         }
 
-        if line == "mathematica.time" {
+        if line == "mathematica_time" {
           let now = chrono::Local::now().to_rfc3339();
           let utc = chrono::Utc::now().to_rfc3339();
           eprintln!("{}", serde_json::json!({"local_rfc3339": now, "utc_rfc3339": utc}));
           continue;
         }
 
-        if let Some(rest) = line.strip_prefix("mathematica.execute_code ") {
+        if let Some(rest) = line.strip_prefix("mathematica_execute_code ") {
           let Some(id) = active.as_deref() else {
-            eprintln!("ERR no active session. Run mathematica.create_session first.");
+            eprintln!("ERR no active session. Run mathematica_create_session first.");
             continue;
           };
           let res = sessions.eval(id, rest, std::time::Duration::from_secs(60)).await?;
@@ -90,15 +90,15 @@ pub async fn run_repl() -> anyhow::Result<()> {
           continue;
         }
 
-        if let Some(rest) = line.strip_prefix("mathematica.get_finance ") {
+        if let Some(rest) = line.strip_prefix("mathematica_get_finance ") {
           let Some(id) = active.as_deref() else {
-            eprintln!("ERR no active session. Run mathematica.create_session first.");
+            eprintln!("ERR no active session. Run mathematica_create_session first.");
             continue;
           };
           let parts: Vec<&str> = rest.split_whitespace().collect();
           if parts.is_empty() {
             eprintln!(
-              "ERR usage: mathematica.get_finance <SYMBOL> [PROPERTY] [START] [END] [INTERVAL]"
+              "ERR usage: mathematica_get_finance <SYMBOL> [PROPERTY] [START] [END] [INTERVAL]"
             );
             continue;
           }
@@ -147,9 +147,9 @@ pub async fn run_repl() -> anyhow::Result<()> {
           continue;
         }
 
-        if line.starts_with("mathematica.close_session") {
+        if line.starts_with("mathematica_close_session") {
           // allow optional explicit id:
-          // mathematica.close_session
+          // mathematica_close_session
           // <id>
           let parts: Vec<&str> = line.split_whitespace().collect();
           let id = if parts.len() >= 2 {
@@ -169,7 +169,7 @@ pub async fn run_repl() -> anyhow::Result<()> {
           continue;
         }
 
-        eprintln!("ERR unknown command. Type 'mathematica.time' or 'mathematica.create_session'.");
+        eprintln!("ERR unknown command. Type 'mathematica_time' or 'mathematica_create_session'.");
       }
       | Err(ReadlineError::Interrupted) => {
         eprintln!("CTRL-C: exiting...");

@@ -40,7 +40,7 @@ impl MathematicaServer {
 #[tool_router]
 impl MathematicaServer {
   #[tool(
-    name = "mathematica.create_session",
+    name = "mathematica_create_session",
     description = "Launch a new Wolfram kernel session. Returns a session id that must be used \
                    for subsequent calls. Sessions idle for more than 30 minutes are automatically \
                    closed."
@@ -53,7 +53,7 @@ impl MathematicaServer {
   }
 
   #[tool(
-    name = "mathematica.execute_code",
+    name = "mathematica_execute_code",
     description = "Evaluate Wolfram Language code in a specific session. Returns the result as a \
                    string, captures any printed logs (from Print[] or Message[]), and detects \
                    graphics objects (returning them as Base64 PNGs)."
@@ -83,7 +83,7 @@ impl MathematicaServer {
   }
 
   #[tool(
-    name = "mathematica.close_session",
+    name = "mathematica_close_session",
     description = "Shutdown a specific Wolfram kernel session and release its resources."
   )]
   async fn close_session(
@@ -101,7 +101,7 @@ impl MathematicaServer {
   }
 
   #[tool(
-    name = "mathematica.list_sessions",
+    name = "mathematica_list_sessions",
     description = "Return all active sessions, their creation times, and how long they have been \
                    idle."
   )]
@@ -113,7 +113,7 @@ impl MathematicaServer {
   }
 
   #[tool(
-    name = "mathematica.time",
+    name = "mathematica_time",
     description = "Return current local and UTC time in RFC3339 format."
   )]
   async fn time(&self) -> Result<Json<TimeResult>, String> {
@@ -125,7 +125,7 @@ impl MathematicaServer {
   }
 
   #[tool(
-    name = "mathematica.get_finance",
+    name = "mathematica_get_finance",
     description = "High-level helper for FinancialData[...]. Automatically builds and evaluates \
                    the appropriate Wolfram Language code in the specified session."
   )]
@@ -166,8 +166,8 @@ impl ServerHandler for MathematicaServer {
   fn get_info(&self) -> ServerInfo {
     ServerInfo {
       instructions: Some(
-        "Mathematica/Wolfram MCP server. Use mathematica.create_session, then \
-         mathematica.execute_code / mathematica.get_finance, then mathematica.close_session."
+        "Mathematica/Wolfram MCP server. Use mathematica_create_session, then \
+         mathematica_execute_code / mathematica_get_finance, then mathematica_close_session."
           .to_string()
       ),
       capabilities: ServerCapabilities::builder().enable_tools().build(),
