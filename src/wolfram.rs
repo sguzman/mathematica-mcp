@@ -27,7 +27,13 @@ pub fn resolve_kernel_cmd() -> anyhow::Result<String> {
     }
   }
 
-  // 2) fall back to PATH lookup
+  // 2) try platform discovery (registry on Windows, etc.)
+  if let Some(p) = platform::discover_kernel_path() {
+    tracing::info!(kernel_path = %p.display(), "using kernel found via platform discovery");
+    return Ok(p.to_string_lossy().to_string());
+  }
+
+  // 3) fall back to PATH lookup
   for candidate in platform::get_default_kernel_names() {
     if let Some(p) = find_in_path(candidate) {
       tracing::info!(kernel_path = %p.display(), "using kernel found on PATH");
@@ -35,18 +41,10 @@ pub fn resolve_kernel_cmd() -> anyhow::Result<String> {
     }
   }
 
-  // 3) check platform-specific extra lookup paths
-  for p in platform::get_extra_lookup_paths() {
-    if p.exists() {
-      tracing::info!(kernel_path = %p.display(), "using kernel found in platform extra paths");
-      return Ok(p.to_string_lossy().to_string());
-    }
-  }
-
   // 4) last resort: try bare WolframKernel and let OS/WSTP resolve (may work on
   //    some setups)
   tracing::warn!(
-    "no kernel found via WOLFRAM_KERNEL_PATH, PATH, or extra paths; trying 'WolframKernel' as a fallback"
+    "no kernel found via WOLFRAM_KERNEL_PATH, discovery, or PATH; trying 'WolframKernel' as a fallback"
   );
   Ok("WolframKernel".to_string())
 }

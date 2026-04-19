@@ -1,6 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context};
+use wolfram_app_discovery::WolframApp;
 
 pub struct LinuxPlatform;
 
@@ -22,12 +23,12 @@ impl super::Platform for LinuxPlatform {
         Ok(())
     }
 
-    fn get_default_kernel_names() -> &'static [&'static str] {
-        &["WolframKernel", "MathKernel"]
+    fn discover_kernel_path() -> Option<PathBuf> {
+        WolframApp::try_default().ok()?.kernel_executable_path().ok()
     }
 
-    fn get_extra_lookup_paths() -> Vec<PathBuf> {
-        vec![]
+    fn get_default_kernel_names() -> &'static [&'static str] {
+        &["WolframKernel", "MathKernel"]
     }
 }
 
@@ -39,10 +40,10 @@ pub fn validate_executable(path: &Path) -> anyhow::Result<()> {
     <LinuxPlatform as super::Platform>::validate_executable(path)
 }
 
-pub fn get_default_kernel_names() -> &'static [&'static str] {
-    <LinuxPlatform as super::Platform>::get_default_kernel_names()
+pub fn discover_kernel_path() -> Option<PathBuf> {
+    <LinuxPlatform as super::Platform>::discover_kernel_path()
 }
 
-pub fn get_extra_lookup_paths() -> Vec<PathBuf> {
-    <LinuxPlatform as super::Platform>::get_extra_lookup_paths()
+pub fn get_default_kernel_names() -> &'static [&'static str] {
+    <LinuxPlatform as super::Platform>::get_default_kernel_names()
 }

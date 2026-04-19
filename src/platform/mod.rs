@@ -13,6 +13,6 @@ use std::path::PathBuf;
 pub trait Platform {
     fn shellexpand_path(raw: &str) -> anyhow::Result<PathBuf>;
     fn validate_executable(path: &std::path::Path) -> anyhow::Result<()>;
+    fn discover_kernel_path() -> Option<PathBuf>;
     fn get_default_kernel_names() -> &'static [&'static str];
-    fn get_extra_lookup_paths() -> Vec<PathBuf>;
 }

@@ -634,6 +634,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "wolfram-app-discovery",
  "wolfram-expr",
  "wstp",
 ]
