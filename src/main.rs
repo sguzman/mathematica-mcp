@@ -1,4 +1,5 @@
 mod mcp;
+mod platform;
 mod repl;
 mod session;
 mod session_id;
