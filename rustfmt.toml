@@ -1,11 +1,11 @@
 blank_lines_lower_bound = 0
 blank_lines_upper_bound = 1
 edition                 = "2024"
-max_width               = 40
+max_width               = 100
 
 brace_style = "SameLineWhere"
 
-chain_width          = 40
+chain_width          = 100
 color                = "Always"
 combine_control_expr = false
 
@@ -19,7 +19,7 @@ enum_discrim_align_threshold = 20
 error_on_line_overflow = false
 error_on_unformatted   = false
 
-fn_call_width    = 40
+fn_call_width    = 100
 fn_params_layout = "Vertical"
 fn_single_line   = false
 

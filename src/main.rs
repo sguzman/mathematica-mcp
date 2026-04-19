@@ -12,9 +12,7 @@ use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
-#[command(
-  name = "mathematica-mcp-server"
-)]
+#[command(name = "mathematica-mcp-server")]
 #[command(about = "MCP server exposing Wolfram/Mathematica via WSTP", long_about = None)]
 struct Cli {
   #[command(subcommand)]
@@ -38,11 +36,7 @@ fn init_tracing() {
   // uses stdout for protocol).
   // tracing-subscriber defaults to
   // stderr; we keep it that way.
-  let filter =
-    EnvFilter::try_from_default_env()
-      .unwrap_or_else(|_| {
-        EnvFilter::new("info")
-      });
+  let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
   tracing_subscriber::fmt()
     .with_env_filter(filter)
     .with_target(true)
@@ -56,14 +50,11 @@ async fn main() -> anyhow::Result<()> {
   init_tracing();
 
   let cli = Cli::parse();
-  let cmd =
-    cli.cmd.unwrap_or(Command::Serve);
+  let cmd = cli.cmd.unwrap_or(Command::Serve);
 
   match cmd {
     | Command::Serve => {
-      info!(
-        "starting MCP server (stdio)"
-      );
+      info!("starting MCP server (stdio)");
       mcp::run_server().await?;
     }
     | Command::Repl => {
