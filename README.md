@@ -118,22 +118,27 @@ Kernel resolution is implemented in [`src/wolfram.rs`](/win/linux/Code/rust/math
 
 Resolution order:
 
-1. `WOLFRAM_KERNEL_PATH`
-2. platform discovery via `wolfram-app-discovery`
-3. executable lookup on `PATH`
-4. fallback to a bare `WolframKernel` command name
+1. platform-specific path from `mathematica-mcp.toml`
+2. `WOLFRAM_KERNEL_PATH` as a legacy override
+3. platform discovery via `wolfram-app-discovery`
+4. executable lookup on `PATH`
+5. fallback to a bare `WolframKernel` command name
 
-### `WOLFRAM_KERNEL_PATH`
+### `mathematica-mcp.toml`
 
-If your Wolfram installation is not discoverable automatically, set the kernel explicitly:
+Runtime configuration now lives in [`mathematica-mcp.toml`](/win/linux/Code/rust/mathematica-mcp/mathematica-mcp.toml):
 
-```bash
-export WOLFRAM_KERNEL_PATH=/path/to/WolframKernel
+```toml
+[kernel]
+linux_path = "/usr/local/Wolfram/WolframEngine/15.0/Executables/WolframKernel"
+windows_path = "C:\\Program Files\\Wolfram Research\\Wolfram\\14.3\\WolframKernel.exe"
 ```
 
-On Windows, use the `.exe` path.
+At runtime, the binary automatically selects `linux_path` or `windows_path` based on the current platform, expands the path, and validates that it points to a usable kernel executable.
 
-The platform layer validates that the configured path exists and looks executable for the current OS.
+If you want to keep the config somewhere else, set `MATHEMATICA_MCP_CONFIG` to the TOML file path before launching the server.
+
+`WOLFRAM_KERNEL_PATH` is still supported as a fallback for compatibility, but the preferred place for explicit kernel configuration is the TOML file.
 
 ## Logging And Observability
 
@@ -180,6 +185,12 @@ cargo run -- --help
 cargo run -- serve
 cargo run -- repl
 cargo test
+```
+
+On Windows PowerShell, the REPL and server can be run directly against the configured kernel path from `mathematica-mcp.toml`:
+
+```powershell
+cargo run -- repl
 ```
 
 ## Repository Layout

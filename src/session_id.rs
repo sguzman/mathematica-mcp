@@ -70,7 +70,6 @@ impl AnimalIdGenerator {
   }
 }
 
-
 /// We need a 2048-entry "wordlist"
 /// (because each word encodes 11 bits).
 ///

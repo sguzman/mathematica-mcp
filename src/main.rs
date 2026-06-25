@@ -1,3 +1,4 @@
+mod config;
 mod mcp;
 mod platform;
 mod repl;

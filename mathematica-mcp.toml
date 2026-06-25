@@ -1,0 +1,3 @@
+[kernel]
+linux_path = "/usr/local/Wolfram/WolframEngine/15.0/Executables/WolframKernel"
+windows_path = "C:\\Program Files\\Wolfram Research\\Wolfram\\14.3\\WolframKernel.exe"

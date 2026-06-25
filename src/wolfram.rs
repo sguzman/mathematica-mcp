@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use std::env;
+use std::path::PathBuf;
 
 use anyhow::{
   Context,
@@ -13,10 +13,27 @@ use wolfram_expr::{
 use wstp::Link;
 use wstp::kernel::WolframKernelProcess;
 
-use crate::platform;
+use crate::{
+  config,
+  platform
+};
 
 pub fn resolve_kernel_cmd() -> anyhow::Result<String> {
-  // 1) honor WOLFRAM_KERNEL_PATH
+  // 1) honor the platform-specific path in the repo/application TOML config
+  if let Some(loaded) = config::load_config()? {
+    if let Some(raw) = loaded.config.platform_kernel_path() {
+      let path = platform::shellexpand_path(raw)?;
+      platform::validate_executable(&path)?;
+      tracing::info!(
+        config_path = %loaded.path.display(),
+        kernel_path = %path.display(),
+        "using kernel from TOML config"
+      );
+      return Ok(path.to_string_lossy().to_string());
+    }
+  }
+
+  // 2) honor WOLFRAM_KERNEL_PATH as a legacy override
   if let Ok(raw) = env::var("WOLFRAM_KERNEL_PATH") {
     let raw = raw.trim();
     if !raw.is_empty() {
@@ -27,13 +44,13 @@ pub fn resolve_kernel_cmd() -> anyhow::Result<String> {
     }
   }
 
-  // 2) try platform discovery (registry on Windows, etc.)
+  // 3) try platform discovery (registry on Windows, etc.)
   if let Some(p) = platform::discover_kernel_path() {
     tracing::info!(kernel_path = %p.display(), "using kernel found via platform discovery");
     return Ok(p.to_string_lossy().to_string());
   }
 
-  // 3) fall back to PATH lookup
+  // 4) fall back to PATH lookup
   for candidate in platform::get_default_kernel_names() {
     if let Some(p) = find_in_path(candidate) {
       tracing::info!(kernel_path = %p.display(), "using kernel found on PATH");
@@ -41,10 +58,11 @@ pub fn resolve_kernel_cmd() -> anyhow::Result<String> {
     }
   }
 
-  // 4) last resort: try bare WolframKernel and let OS/WSTP resolve (may work on
+  // 5) last resort: try bare WolframKernel and let OS/WSTP resolve (may work on
   //    some setups)
   tracing::warn!(
-    "no kernel found via WOLFRAM_KERNEL_PATH, discovery, or PATH; trying 'WolframKernel' as a fallback"
+    "no kernel found via config, WOLFRAM_KERNEL_PATH, discovery, or PATH; trying 'WolframKernel' \
+     as a fallback"
   );
   Ok("WolframKernel".to_string())
 }
