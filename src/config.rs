@@ -15,7 +15,9 @@ pub struct RuntimeConfig {
 
 #[derive(Debug, Default, Deserialize, Clone)]
 pub struct KernelConfig {
+  #[cfg_attr(target_os = "windows", allow(dead_code))]
   pub linux_path:   Option<String>,
+  #[cfg_attr(target_os = "linux", allow(dead_code))]
   pub windows_path: Option<String>
 }
 
