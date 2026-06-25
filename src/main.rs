@@ -10,6 +10,7 @@ use clap::{
   Parser,
   Subcommand
 };
+use std::io::IsTerminal;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -52,7 +53,11 @@ async fn main() -> anyhow::Result<()> {
   init_tracing();
 
   let cli = Cli::parse();
-  let cmd = cli.cmd.unwrap_or(Command::Serve);
+  let cmd = match cli.cmd {
+    | Some(cmd) => cmd,
+    | None if std::io::stdin().is_terminal() => Command::Repl,
+    | None => Command::Serve
+  };
 
   match cmd {
     | Command::Serve => {

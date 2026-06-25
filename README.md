@@ -43,6 +43,8 @@ This is also the default when no subcommand is provided:
 cargo run
 ```
 
+When launched directly from an interactive terminal, the binary now defaults to `repl` instead of `serve`, because `serve` expects an MCP client to speak JSON-RPC over stdio. MCP hosts still get server mode automatically because they launch the process with piped stdio rather than a terminal.
+
 ### `repl`
 
 Runs an interactive local shell that calls the same session manager and evaluation path without MCP in the middle.
