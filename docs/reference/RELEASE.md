@@ -9,7 +9,7 @@ Current Cargo version: **0.1.0**. Changes on main are development work, not a ce
 3. The unit tests pass on the same native machine.
 4. The real-kernel test in scripts/mcp_smoke.py passes: MCP handshake, arithmetic, PNG, timeout, recovery and shutdown.
 5. Verify configuration discovery, explicitly missing config errors and clean stdout JSON-RPC.
-6. Repeat a native build and smoke test on Windows before claiming Windows release parity.
+6. Treat Linux as the acceptance target. The legacy Windows code is not validated or required for this release.
 
 GitHub CI may typecheck without a kernel using generated bindings, but such a check does not prove native WSTP linkage or runtime functionality.
 
@@ -18,7 +18,7 @@ GitHub CI may typecheck without a kernel using generated bindings, but such a ch
 - Use Conventional Commits.
 - Stay in 0.x until runtime, protocol, and configuration semantics stabilize.
 - A signed-session-ID format is incompatible with the original format; session IDs are intentionally valid only during the owning process.
-- Do not tag 1.0.0 until native integration tests pass on all advertised platforms and the supported contract is documented.
+- Do not tag 1.0.0 until native integration tests pass on Linux and the supported contract is documented.
 
 ## Publishing
 
