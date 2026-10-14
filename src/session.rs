@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{
   AtomicI64,
+  AtomicUsize,
   Ordering
 };
 use std::thread;
@@ -39,6 +40,7 @@ pub enum SessionRequest {
 pub struct SessionHandle {
   pub created_at:    DateTime<Utc>,
   pub last_accessed: Arc<AtomicI64>,
+  pub in_flight:     Arc<AtomicUsize>,
   pub tx:            Sender<SessionRequest>,
   join:              thread::JoinHandle<()>
 }
@@ -78,7 +80,7 @@ impl SessionManager {
           let map = cleanup_inner.lock().await;
           for (id, handle) in map.iter() {
             let last = handle.last_accessed.load(Ordering::SeqCst);
-            if now - last > 1800 {
+            if now - last > 1800 && handle.in_flight.load(Ordering::SeqCst) == 0 {
               // 30 minutes
               to_remove.push(id.clone());
             }
@@ -91,6 +93,7 @@ impl SessionManager {
             let mut map = cleanup_inner.lock().await;
             let still_idle = map.get(&id).is_some_and(|h| {
               now - h.last_accessed.load(Ordering::SeqCst) > 1800
+                && h.in_flight.load(Ordering::SeqCst) == 0
             });
             if still_idle { map.remove(&id) } else { None }
           };
@@ -118,7 +121,7 @@ impl SessionManager {
     let session_id = self.signer.generate();
     let kernel_cmd = wolfram::resolve_kernel_cmd()?;
 
-    let (tx, rx) = flume::unbounded::<SessionRequest>();
+    let (tx, rx) = flume::bounded::<SessionRequest>(32);
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<anyhow::Result<()>>();
 
     let join = thread::spawn(move || {
@@ -165,6 +168,7 @@ impl SessionManager {
         map.insert(session_id.clone(), SessionHandle {
           created_at: Utc::now(),
           last_accessed: Arc::new(AtomicI64::new(Utc::now().timestamp())),
+          in_flight: Arc::new(AtomicUsize::new(0)),
           tx,
           join
         });
@@ -186,25 +190,29 @@ impl SessionManager {
       return Err(anyhow!("timeout_seconds must be between 1 and 3600"));
     }
 
-    let handle = {
+    let (handle, in_flight) = {
       let map = self.inner.lock().await;
       let h =
         map.get(session_id).ok_or_else(|| anyhow!("session not found or closed: {session_id}"))?;
       h.last_accessed.store(Utc::now().timestamp(), Ordering::SeqCst);
-      h.tx.clone()
+      h.in_flight.fetch_add(1, Ordering::SeqCst);
+      (h.tx.clone(), h.in_flight.clone())
     };
 
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-    handle
-      .send(SessionRequest::Eval {
-        code:  code.to_string(),
-        timeout,
-        reply: reply_tx
-      })
-      .map_err(|e| anyhow!("failed to send eval request: {e:?}"))?;
+    if let Err(error) = handle.try_send(SessionRequest::Eval {
+      code: code.to_string(),
+      timeout,
+      reply: reply_tx
+    }) {
+      in_flight.fetch_sub(1, Ordering::SeqCst);
+      return Err(anyhow!("session request queue unavailable or full: {error:?}"));
+    }
 
     // Allow the kernel timer time to return structured results over WSTP.
-    match tokio::time::timeout(timeout + Duration::from_secs(10), reply_rx).await {
+    let response = tokio::time::timeout(timeout + Duration::from_secs(10), reply_rx).await;
+    in_flight.fetch_sub(1, Ordering::SeqCst);
+    match response {
       | Ok(Ok(res)) => res,
       | Ok(Err(e)) => Err(anyhow!("eval reply canceled: {e:?}")),
       | Err(_) => {
@@ -213,7 +221,7 @@ impl SessionManager {
         tracing::warn!(session_id = %session_id, "unresponsive kernel; retiring session");
         if let Some(handle) = self.inner.lock().await.remove(session_id) {
           let (reply, _response) = tokio::sync::oneshot::channel();
-          let _ = handle.tx.send(SessionRequest::Shutdown { reply });
+          let _ = handle.tx.try_send(SessionRequest::Shutdown { reply });
           // A blocked native call cannot safely be joined; detach its worker.
           drop(handle);
         }
@@ -242,8 +250,8 @@ impl SessionManager {
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
     handle
       .tx
-      .send(SessionRequest::Shutdown { reply: reply_tx })
-      .map_err(|e| anyhow!("failed to request worker shutdown: {e:?}"))?;
+      .try_send(SessionRequest::Shutdown { reply: reply_tx })
+      .map_err(|e| anyhow!("worker busy or shutdown queue full: {e:?}"))?;
 
     // Never let a blocked kernel hang the close tool or the cleanup loop.
     tokio::time::timeout(Duration::from_secs(10), reply_rx)
