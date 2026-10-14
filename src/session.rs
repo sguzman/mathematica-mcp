@@ -158,6 +158,12 @@ impl SessionManager {
             timeout,
             reply
           } => {
+            // The requester may have disconnected while this command was queued.
+            // Never execute cancelled commands that may have side effects.
+            if reply.is_closed() {
+              tracing::debug!("discarding cancelled kernel evaluation");
+              continue;
+            }
             let res = wolfram::evaluate(link, &code, timeout);
             let _ = reply.send(res);
           }
@@ -207,7 +213,10 @@ impl SessionManager {
       let h =
         map.get(session_id).ok_or_else(|| anyhow!("session not found or closed: {session_id}"))?;
       h.last_accessed.store(Utc::now().timestamp(), Ordering::SeqCst);
-      h.in_flight.fetch_add(1, Ordering::SeqCst);
+      // Each WSTP kernel is serial. Do not accept concurrent requests into
+      // a queue where their deadlines would expire before execution begins.
+      h.in_flight.compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+        .map_err(|_| anyhow!("session busy: wait for the current evaluation to finish"))?;
       (h.tx.clone(), ActiveEvaluationGuard {
         in_flight: h.in_flight.clone(),
         last_accessed: h.last_accessed.clone()
