@@ -40,6 +40,15 @@ echo "Rust compiler: "(rustc --version)
 echo "Cargo: "(cargo --version)
 echo "Using the current system Rust toolchain (no repo-pinned nightly)."
 
+if set -q WAYLAND_DISPLAY
+    echo "Graphical environment: Wayland display present."
+else if set -q DISPLAY
+    echo "Graphical environment: X11 display present."
+else
+    echo "WARNING: neither WAYLAND_DISPLAY nor DISPLAY is present."
+    echo "WARNING: Wolfram PNG export may require a graphical front end."
+end
+
 echo "=== Native WSTP build ==="
 cargo build --locked
 or exit 1
