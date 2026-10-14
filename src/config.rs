@@ -42,6 +42,9 @@ impl RuntimeConfig {
 pub fn load_config() -> anyhow::Result<Option<LoadedConfig>> {
   let path = config_path()?;
   if !path.is_file() {
+    if env::var(CONFIG_PATH_ENV_VAR).is_ok_and(|value| !value.trim().is_empty()) {
+      anyhow::bail!("explicit config file does not exist: {}", path.display());
+    }
     return Ok(None);
   }
 
