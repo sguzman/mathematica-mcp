@@ -1,9 +1,0 @@
-# rust-toolchain.toml
-[toolchain]
-channel = "nightly"
-components = [
-  "clippy",
-  "rust-src",
-  "rustfmt",
-]
-profile = "default"
