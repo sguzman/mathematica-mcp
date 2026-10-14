@@ -20,8 +20,9 @@ use crate::{
 
 pub fn resolve_kernel_cmd() -> anyhow::Result<String> {
   // 1) honor the platform-specific path in the repo/application TOML config
-  if let Some(loaded) = config::load_config()? {
-    if let Some(raw) = loaded.config.platform_kernel_path() {
+  if let Some(loaded) = config::load_config()?
+    && let Some(raw) = loaded.config.platform_kernel_path()
+  {
       let path = platform::shellexpand_path(raw)?;
       platform::validate_executable(&path)?;
       tracing::info!(
@@ -30,7 +31,6 @@ pub fn resolve_kernel_cmd() -> anyhow::Result<String> {
         "using kernel from TOML config"
       );
       return Ok(path.to_string_lossy().to_string());
-    }
   }
 
   // 2) honor WOLFRAM_KERNEL_PATH as a legacy override
@@ -143,10 +143,10 @@ pub fn evaluate(
         return parse_evaluation_response(json_str, logs);
       }
       | wstp::sys::TEXTPKT => {
-        if let Ok(expr) = link.get_expr() {
-          if let ExprKind::String(s) = expr.kind() {
-            logs.push(s.clone());
-          }
+        if let Ok(expr) = link.get_expr()
+          && let ExprKind::String(s) = expr.kind()
+        {
+          logs.push(s.clone());
         }
         link.new_packet().map_err(|e| anyhow!("new_packet failed: {e:?}"))?;
       }
