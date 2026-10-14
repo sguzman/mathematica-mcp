@@ -5,6 +5,32 @@ use anyhow::{Context, anyhow};
 use crate::session::{SessionInfo, SessionManager};
 use crate::wolfram::{self, EvalResult};
 
+/// A typed request for Mathematica's `FinancialData` function.
+///
+/// Dates, when specified, must be ISO `YYYY-MM-DD` strings and supplied
+/// together. This type only builds an expression; the underlying Wolfram
+/// service may need network access.
+#[derive(Debug, Clone, Copy)]
+pub struct FinanceQuery<'a> {
+  pub symbol: &'a str,
+  pub property: Option<&'a str>,
+  pub start_date: Option<&'a str>,
+  pub end_date: Option<&'a str>,
+  pub interval: Option<&'a str>
+}
+
+impl<'a> FinanceQuery<'a> {
+  pub fn new(symbol: &'a str) -> Self {
+    Self {
+      symbol,
+      property: None,
+      start_date: None,
+      end_date: None,
+      interval: None
+    }
+  }
+}
+
 /// A native WSTP-backed Mathematica session manager.
 ///
 /// Clone this handle to share its sessions between application components.
@@ -69,15 +95,11 @@ impl Mathematica {
   pub async fn get_finance(
     &self,
     session_id: &str,
-    symbol: &str,
-    property: Option<&str>,
-    start_date: Option<&str>,
-    end_date: Option<&str>,
-    interval: Option<&str>,
+    query: FinanceQuery<'_>,
     timeout: Duration
   ) -> anyhow::Result<EvalResult> {
     let code = wolfram::build_financial_data_code(
-      symbol, property, start_date, end_date, interval
+      query.symbol, query.property, query.start_date, query.end_date, query.interval
     )?;
     self.execute(session_id, &code, timeout).await
   }
