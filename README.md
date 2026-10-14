@@ -2,7 +2,7 @@
 
 A local, Rust-based Model Context Protocol (MCP) server for Wolfram Language and Mathematica. It launches real kernels over **WSTP** and exposes computation through **stdio**. It does not send computation to a cloud service.
 
-**Status:** v0.1.0 in development. Source-level improvements landed in October 2026, but a full native build and live Wolfram kernel run have not yet been independently verified for this maintenance pass.
+**Status:** v0.1.0 in development. **Native Linux acceptance smoke verified on 2026-10-14:** EndeavourOS with Rust 1.99.0 and Wolfram 15.0 successfully completed native WSTP build, all 10 Rust unit tests, strict Clippy, and the real-kernel MCP smoke suite (including PNG graphics, kernel-side timeout/recovery and clean shutdown). This is an observed single-machine acceptance run, not a stability certification for every platform or failure mode.
 
 ## MCP tools
 
@@ -137,6 +137,6 @@ On GitHub-hosted CI without Wolfram native libraries, compile-time typechecking 
 
 ## Release state
 
-The crate is currently **0.1.0**. Do not tag it as stable until a successful native Linux build, unit tests, MCP smoke test, and platform-specific acceptance checks. Windows is preserved as legacy code but is not a release gate here. See docs/reference/RELEASE.md for release gates.
+The crate is currently **0.1.0**. The initial Linux native build, unit-test, lint, and real-kernel smoke gates passed on 2026-10-14 (Jobflick run 89582e89-ed7a-4121-94b8-5c1ce9bcce81, revision 8728455); stdout JSON-RPC isolation, exceptional native process cleanup and missing-config edge cases still require dedicated acceptance checks before declaring a fully certified release. Windows is preserved as legacy code but is not a release gate here. See docs/reference/RELEASE.md for remaining gates.
 
 License: MIT for this project's code; Wolfram and WSTP retain their separate licenses.
