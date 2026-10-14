@@ -1,6 +1,6 @@
 # Release and maintenance policy
 
-Current Cargo version: **0.1.0**. Changes on main are development work, not a certified release.
+Current Cargo version: **0.1.0**. The project is a **Rust library MVP candidate** until the standalone downstream Rust consumer passes native Linux acceptance. The MCP server's native smoke test has already passed; a new library interface is not verified solely by that test.
 
 ## Acceptance gates
 
@@ -8,9 +8,10 @@ Current Cargo version: **0.1.0**. Changes on main are development work, not a ce
 2. A **native Linux WSTP build** completes against an installed Wolfram kernel.
 3. The unit tests pass on the same native machine.
 4. Wolfram 15 PNG export prerequisite is installed (check using `python3 -u scripts/install_image_metadata_tools.py --check`; the explicit one-time installer is documented in README).
-5. The real-kernel test in scripts/mcp_smoke.py passes: MCP handshake, arithmetic, PNG, timeout, recovery and shutdown.
-6. Verify configuration discovery, explicitly missing config errors and clean stdout JSON-RPC.
-7. Treat Linux as the acceptance target. The legacy Windows code is not validated or required for this release.
+5. The separately resolved native Rust consumer in tests/consumer builds and runs against Wolfram using the library API.
+6. The real-kernel test in scripts/mcp_smoke.py passes: MCP handshake, arithmetic, PNG, timeout, recovery and shutdown.
+7. Verify configuration discovery, explicitly missing config errors and clean stdout JSON-RPC.
+8. Treat Linux as the acceptance target. The legacy Windows code is not validated or required for this release.
 
 GitHub CI may typecheck without a kernel using generated bindings, but such a check does not prove native WSTP linkage or runtime functionality.
 
