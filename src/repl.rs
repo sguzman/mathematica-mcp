@@ -5,11 +5,11 @@ use std::path::PathBuf;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
-use crate::session::SessionManager;
+use crate::Mathematica;
 use crate::wolfram;
 
 pub async fn run_repl() -> anyhow::Result<()> {
-  let sessions = SessionManager::new();
+  let sessions = Mathematica::new()?;
   let mut active: Option<String> = None;
 
   let history_dir = PathBuf::from(".cache");
@@ -79,7 +79,7 @@ pub async fn run_repl() -> anyhow::Result<()> {
             eprintln!("ERR no active session. Run mathematica_create_session first.");
             continue;
           };
-          let res = match sessions.eval(id, rest, std::time::Duration::from_secs(60)).await {
+          let res = match sessions.execute(id, rest, std::time::Duration::from_secs(60)).await {
             Ok(result) => result,
             Err(error) => {
               eprintln!("ERR: {error}");
@@ -141,7 +141,7 @@ pub async fn run_repl() -> anyhow::Result<()> {
                 return Err(e);
               }
             };
-          let res = match sessions.eval(id, &code, std::time::Duration::from_secs(60)).await {
+          let res = match sessions.execute(id, &code, std::time::Duration::from_secs(60)).await {
             Ok(result) => result,
             Err(error) => {
               eprintln!("ERR: {error}");
