@@ -79,7 +79,13 @@ pub async fn run_repl() -> anyhow::Result<()> {
             eprintln!("ERR no active session. Run mathematica_create_session first.");
             continue;
           };
-          let res = sessions.eval(id, rest, std::time::Duration::from_secs(60)).await?;
+          let res = match sessions.eval(id, rest, std::time::Duration::from_secs(60)).await {
+            Ok(result) => result,
+            Err(error) => {
+              eprintln!("ERR: {error}");
+              continue;
+            }
+          };
           for log in res.logs {
             eprintln!("LOG: {log}");
           }
@@ -135,7 +141,13 @@ pub async fn run_repl() -> anyhow::Result<()> {
                 return Err(e);
               }
             };
-          let res = sessions.eval(id, &code, std::time::Duration::from_secs(60)).await?;
+          let res = match sessions.eval(id, &code, std::time::Duration::from_secs(60)).await {
+            Ok(result) => result,
+            Err(error) => {
+              eprintln!("ERR: {error}");
+              continue;
+            }
+          };
           eprintln!("WL: {code}");
           for log in res.logs {
             eprintln!("LOG: {log}");
