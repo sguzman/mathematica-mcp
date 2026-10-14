@@ -11,10 +11,7 @@ Validation depends on whether Wolfram/WSTP is installed.
 
 ## Real native verification (required before a release)
 
-- cargo build --locked
-- cargo test --locked
-- cargo clippy --all-targets -- -D warnings
-- python3 scripts/mcp_smoke.py
-- Repeat platform-specific native smoke tests before advertising that platform as verified.
+- fish scripts/linux_qa.fish (build, cargo test, clippy, live MCP smoke)
+- Linux is the only required acceptance platform for this maintenance cycle.
 
 Do not claim these checks passed merely because the commands are documented. Record actual results in the release notes. No nonexistent post-change scripts or benchmarks are required.
