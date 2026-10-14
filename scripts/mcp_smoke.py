@@ -167,6 +167,19 @@ def run(executable: str) -> None:
         session_id = None
         print("PASS: clean shutdown", flush=True)
     finally:
+        # Attempt cleanup even when an assertion aborts the test early.
+        if session_id and client.proc.poll() is None:
+            try:
+                client.call(
+                    "tools/call",
+                    {
+                        "name": "mathematica_close_session",
+                        "arguments": {"session_id": session_id},
+                    },
+                    timeout=22,
+                )
+            except Exception as exc:
+                print(f"WARN: best-effort session cleanup failed: {exc}", file=sys.stderr)
         client.close()
 
 
