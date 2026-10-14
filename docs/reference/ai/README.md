@@ -1,11 +1,11 @@
-# AI Rules Index
+# Maintainer index
 
-- Rust repo rules: docs/ai/RUST.md
-- Project overview and API docs: README.md (Pulsewire)
-- Branding assets: branding/
-- Release policy: docs/RELEASE.md
-- Roadmap: docs/ROADMAP.md
-- Tooling: cargo-release, git-cliff, just, biome, taplo, rustfmt, rumdl, lychee,
-  typos, hyperfine
-- Tooling guidelines: docs/ai/tools/ADDING.md
-- Benchmarking: docs/reference/tools/hyperfine.md
+Mathematica MCP is a Rust/WSTP MCP server, not a generic application template.
+
+- Runtime and setup: ../../../README.md
+- Agent/source maintenance rules: RUST.md
+- Validation after changes: POST-CHANGES.md
+- Release criteria: ../RELEASE.md
+- Current migration and quality backlog: ../migration/roadmap.md
+
+Do not include private user conversations, secrets, kernel license keys, or personal file paths in public commits.
