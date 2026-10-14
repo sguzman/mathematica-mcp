@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
         with:
-          components: rustfmt
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Verify Cargo metadata
         run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
@@ -28,8 +28,12 @@ jobs:
         env:
           DOCS_RS: "1"
         run: cargo check --locked --all-targets
-      - name: Validate smoke suite syntax
-        run: python3 -m py_compile scripts/mcp_smoke.py
+      - name: Rust lint without native Wolfram linking
+        env:
+          DOCS_RS: "1"
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test MCP smoke client independently
+        run: python3 -m unittest discover -s scripts -p "test_*.py"
 
 # Native WSTP linking and real Wolfram kernel tests are deliberately not claimed
 # by this job. Run scripts/mcp_smoke.py on a properly configured local machine.
