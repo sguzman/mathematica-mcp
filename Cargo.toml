@@ -3,6 +3,19 @@ edition = "2024"
 license = "MIT"
 name    = "mathematica-mcp"
 version = "0.1.0"
+description = "Embed Wolfram Mathematica through native WSTP in Rust or serve it over MCP"
+repository = "https://github.com/sguzman/mathematica-mcp"
+readme = "README.md"
+keywords = ["wolfram", "mathematica", "wstp", "mcp"]
+categories = ["api-bindings", "science"]
+
+[lib]
+name = "mathematica_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mathematica-mcp"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"
