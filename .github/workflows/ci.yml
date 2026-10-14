@@ -32,6 +32,11 @@ jobs:
         env:
           DOCS_RS: "1"
         run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Validate independent Rust library consumer without Wolfram runtime
+        env:
+          DOCS_RS: "1"
+        run: cargo check --manifest-path tests/consumer/Cargo.toml
+
       - name: Test MCP smoke client independently
         run: python3 -m unittest discover -s scripts -p "test_*.py"
       - name: Parse-check bounded Linux graphics probe
