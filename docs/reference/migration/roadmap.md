@@ -18,7 +18,7 @@ The Rust server is implemented but not yet certified as a stable release.
 - Run scripts/mcp_smoke.py against a licensed local kernel, review logs, and fix any failures.
 - Verify no orphaned child processes during a stuck native WSTP call. Current library exposes no direct kill method.
 - Verify Python-to-Rust behavior parity where it matters for existing consumers.
-- Run the same native acceptance tests on Windows.
+- Windows verification is deferred and is not required to finish this Linux-focused maintenance cycle.
 - Tag only after the acceptance matrix is recorded in the release notes.
 
 Until these checks pass, this repository remains a **development** release at v0.1.0.
