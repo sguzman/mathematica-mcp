@@ -72,7 +72,7 @@ pub struct SessionInfo {
 
 impl SessionManager {
   pub fn new() -> Self {
-    let signer = SessionIdSigner::from_env();
+    let signer = SessionIdSigner::new();
     let inner = Arc::new(Mutex::new(HashMap::new()));
     let manager = Self {
       signer,
