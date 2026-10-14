@@ -1,43 +1,11 @@
-# Secondary/optional Roadmap
+# Optional future improvements
 
-After releasing `v1.0.0`, use this space to capture aspirational enhancements
-that go beyond the original project’s scope. These should not block the primary
-port but provide a structured queue for future iterations.
+The following should not block native build and smoke-test verification:
 
-## Potential Additions
+- Support structured image/content blocks in MCP responses in addition to PNG Base64 fields.
+- Add kernel process ownership/termination at the native WSTP boundary for genuinely hard deadlines.
+- Add bounded per-session request concurrency and configurable resource policies.
+- Expose kernel health and diagnostic tools without leaking secrets or stdout protocol noise.
+- Add reproducible benchmark fixtures for symbolic expressions and financial data requests.
 
-1. **Advanced tooling**
-  - Build CLI helpers (e.g., `projectname doctor`, `projectname format`) that
-    streamline developer workflows.
-  - Consider adding a `just` task or script that mirrors existing shell helpers
-    the reference project may have used.
-
-2. **Observability enhancements**
-  - Introduce richer `tracing` spans and metrics dashboards (Prometheus
-    exporters, structured log exporters) if the original app only had simple
-    logging.
-  - Add configuration toggles for telemetry sampling or sink selection.
-
-3. **Platform integrations**
-  - If the reference app interacts with external services (e.g., S3, message
-    brokers), think about building adapters or plugins so the Rust port can swap
-    providers more easily.
-
-4. **Documentation & guides**
-  - Expand on the README/brand docs by adding architecture diagrams, onboarding
-    checklists, or sample data for the Rust port.
-  - Capture any previously undocumented behaviors or heuristics uncovered while
-    translating.
-
-5. **Performance/assertion tests**
-  - Write benchmarks or smoke tests that prove the Rust version meets or exceeds
-    the original performance profile.
-  - Bolster the test suite with regression cases derived from real-world usage.
-
-## Process Note
-
-Treat these ideas as a backlog you can reorder once `v1.0.0` is complete.
-Document the required dependencies, efforts, and acceptance criteria for each
-item so future work remains predictable and tied to this template’s tooling.
-Keep this file updated as you uncover new opportunities during or after the
-migration.
+Avoid replacing the working WSTP architecture without measured reasons.
