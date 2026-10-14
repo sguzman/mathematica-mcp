@@ -25,7 +25,7 @@ impl Default for AnimalIdGenerator {
 }
 
 impl AnimalIdGenerator {
-  pub fn from_env() -> Self {
+  pub fn new() -> Self {
     Self::default()
   }
 
