@@ -1,305 +1,115 @@
 # Mathematica MCP
 
-`mathematica-mcp` is a Rust MCP server that exposes a local Wolfram Language / Mathematica kernel over stdio. It is intended for MCP-compatible clients that need symbolic computation, numerical evaluation, finance lookups, or notebook-style experimentation backed by a real local kernel instead of a remote API.
+A local, Rust-based Model Context Protocol (MCP) server for Wolfram Language and Mathematica. It launches real kernels over **WSTP** and exposes computation through **stdio**. It does not send computation to a cloud service.
 
-The repository also includes a local REPL that exercises the same session-management and evaluation path without requiring an MCP host, which makes it useful for development, debugging, and validating kernel setup.
+**Status:** v0.1.0 in development. Source-level improvements landed in October 2026, but a full native build and live Wolfram kernel run have not yet been independently verified for this maintenance pass.
 
-## What The Project Does
+## MCP tools
 
-The server starts one or more local Wolfram kernel processes and presents them through a small MCP tool surface:
+| Tool | Purpose |
+| --- | --- |
+| mathematica_create_session | Launch a kernel and issue a signed session ID |
+| mathematica_execute_code | Run arbitrary Wolfram Language in the session |
+| mathematica_list_sessions | Show active sessions and idle durations |
+| mathematica_close_session | Shut down a session |
+| mathematica_get_finance | Convenience wrapper around FinancialData |
+| mathematica_time | Local and UTC time |
 
-- Create a kernel-backed session.
-- Execute arbitrary Wolfram Language code inside a specific session.
-- Close a session and release its resources.
-- List active sessions and their idle times.
-- Return current local and UTC time.
-- Provide a convenience helper around `FinancialData[...]`.
+Each session has its own worker thread and kernel. Evaluations return InputForm text, captured print packets, elapsed milliseconds, and optional Base64-encoded PNG data.
 
-Each session is isolated in its own worker thread and is cleaned up automatically after 30 minutes of inactivity.
+**Security:** Code execution is deliberately arbitrary and is **not sandboxed**. Run the server only for trusted local MCP clients. Do not expose the transport to untrusted users.
 
-## Why This Exists
+## Prerequisites
 
-Most MCP clients speak stdio well, but they do not know how to launch and manage a local Mathematica kernel. This project fills that gap:
+- Rust toolchain and Cargo (see rust-toolchain.toml).
+- A locally installed and licensed Mathematica / Wolfram Language kernel.
+- A matching native WSTP development library, discoverable by the patched WSTP build script.
+- Linux or Windows (both require their own native integration test).
 
-- `rmcp` handles the MCP server and stdio transport.
-- `wstp` handles the Wolfram Symbolic Transfer Protocol bridge into the kernel.
-- The crate adds session lifecycle management, kernel discovery, evaluation wrappers, and a local debugging workflow.
+Wolfram licensing and WSTP redistribution obligations are separate from this project's MIT license.
 
-## Runtime Modes
+## Launch
 
-The binary supports two modes.
+For an interactive local REPL:
 
-### `serve`
+~~~sh
+cargo build --locked
+cargo run -- repl
+~~~
 
-Runs the MCP server over stdio for use by MCP hosts such as desktop assistants, editor integrations, or custom clients.
+For an MCP-compatible host, use piped stdio:
 
-```bash
+~~~sh
 cargo run -- serve
-```
+~~~
 
-This is also the default when no subcommand is provided:
+The binary selects REPL automatically when launched from a terminal, and server mode when launched with piped stdin. An explicit serve command is safest in MCP configuration. Server logging goes to **stderr**, never stdout.
 
-```bash
-cargo run
-```
+Typical client sequence: create a session, execute code using the returned ID, then close the session. IDs are signed with a per-process secret and **expire across server restarts**.
 
-When launched directly from an interactive terminal, the binary now defaults to `repl` instead of `serve`, because `serve` expects an MCP client to speak JSON-RPC over stdio. MCP hosts still get server mode automatically because they launch the process with piped stdio rather than a terminal.
+## Kernel path and configuration
 
-### `repl`
+Kernel resolution checks:
 
-Runs an interactive local shell that calls the same session manager and evaluation path without MCP in the middle.
+1. A platform-specific path in mathematica-mcp.toml.
+2. WOLFRAM_KERNEL_PATH environment variable.
+3. Wolfram installation discovery.
+4. WolframKernel / MathKernel on PATH.
+5. A bare WolframKernel executable as a last attempt.
 
-```bash
-cargo run -- repl
-```
+The repository's TOML ships without an active absolute path. A hard-coded path would otherwise block discovery on different machines.
 
-The REPL is useful when:
+For an explicit path, uncomment linux_path or windows_path in mathematica-mcp.toml. For a non-default config location, set MATHEMATICA_MCP_CONFIG to the full TOML path. A missing explicitly requested configuration file is an error.
 
-- you want to verify that the Wolfram kernel launches correctly;
-- you want to debug evaluation behavior before testing through an MCP client;
-- you want to inspect raw output, logs, and graphics handling locally.
+Example one-time kernel override:
 
-## MCP Tool Surface
+~~~sh
+WOLFRAM_KERNEL_PATH=/absolute/path/to/WolframKernel cargo run -- serve
+~~~
 
-The server currently exposes these tools from [`src/mcp.rs`](/win/linux/Code/rust/mathematica-mcp/src/mcp.rs):
+## Evaluation timeouts and failure behavior
 
-- `mathematica_create_session`
-  Launch a new kernel session and return a session id.
-- `mathematica_execute_code`
-  Evaluate Wolfram Language code in a specific session.
-- `mathematica_close_session`
-  Shut down a session.
-- `mathematica_list_sessions`
-  Return active sessions, creation time, and idle time.
-- `mathematica_time`
-  Return local and UTC time in RFC3339 format.
-- `mathematica_get_finance`
-  Build and execute a `FinancialData[...]` expression for a given ticker and optional property/date range/interval.
+The default is 60 seconds; timeout_seconds must be between **1 and 3600**. Each evaluation uses Wolfram's native TimeConstrained, which normally aborts expensive Wolfram code without losing the session. The Rust watchdog allows an additional 10 seconds for WSTP output serialization.
 
-Recommended usage flow:
+If even the watchdog expires, that session is **retired** so the server cannot queue additional requests against an unresponsive kernel. Session startup is bounded to 60 seconds; shutdown waits 10 seconds for worker acknowledgement, then 5 seconds for thread termination. Idle sessions are closed after 30 minutes.
 
-1. Call `mathematica_create_session`.
-2. Reuse the returned `session_id` for one or more `mathematica_execute_code` or `mathematica_get_finance` calls.
-3. Call `mathematica_close_session` when you are done.
+**Known native limitation:** Wolfram AbortProtect, stuck external native calls, and certain WSTP failures can prevent immediate kernel cancellation. The currently used wstp crate does not expose kernel child process termination; an unresponsive native worker may remain until process exit. The project does **not** promise guaranteed process-level kill on deadline.
 
-## How Evaluation Works
+## Tests and verification
 
-The evaluation pipeline lives primarily in [`src/wolfram.rs`](/win/linux/Code/rust/mathematica-mcp/src/wolfram.rs) and [`src/session.rs`](/win/linux/Code/rust/mathematica-mcp/src/session.rs).
+Unit tests cover signed identifiers, configuration selection, evaluation-wrapper generation, and structured response parsing.
 
-At a high level:
+~~~sh
+cargo test --locked
+~~~
 
-1. The server resolves a Wolfram kernel executable.
-2. A new session spawns a dedicated kernel process through WSTP.
-3. Each session owns a worker thread and receives requests over a channel.
-4. User code is wrapped before evaluation so the server can return structured JSON.
-5. The wrapper captures:
-   - `output`: the result rendered with `ToString[..., InputForm]`
-   - `graphics`: a PNG, Base64-encoded, when the result looks like a graphics object
-   - `logs`: text packets such as `Print[...]` output
-6. The MCP layer measures elapsed time and returns the structured result.
+Run the real-kernel protocol smoke test on a machine with a working Mathematica/WSTP installation:
 
-This design keeps the transport layer thin and concentrates kernel behavior in a small number of files.
+~~~sh
+cargo build --locked
+python3 scripts/mcp_smoke.py
+~~~
 
-## Session Model
+The smoke test checks MCP initialization, tool enumeration, Wolfram arithmetic, Base64 PNG output, timeout/error behavior, session recovery, and shutdown. It uses only Python's standard library.
 
-Sessions are managed by `SessionManager` in [`src/session.rs`](/win/linux/Code/rust/mathematica-mcp/src/session.rs).
+On GitHub-hosted CI without Wolfram native libraries, compile-time typechecking can use pregenerated FFI bindings with DOCS_RS=1. **This is not a substitute for native linking or a successful real-kernel test.**
 
-Important behavior:
+## Source layout
 
-- Each session gets its own kernel process.
-- Each session tracks `created_at` and `last_accessed`.
-- Idle sessions are closed automatically after 30 minutes.
-- Eval requests are timeout-bound per call.
-- Closing a session joins the worker thread and removes it from the internal map.
+| File | Responsibility |
+| --- | --- |
+| src/main.rs | Entrypoint and CLI dispatch |
+| src/mcp.rs | MCP tool methods and JSON schemas |
+| src/session.rs | Kernel workers, lifecycle and watchdog |
+| src/session_id.rs | Human-readable signed session IDs |
+| src/wolfram.rs | WSTP evaluation, graphics and finance helper |
+| src/config.rs, src/platform/ | Kernel discovery and platform validation |
+| src/repl.rs | Interactive local REPL |
+| wstp-sys-patched/ | Project-specific WSTP FFI patch |
+| scripts/mcp_smoke.py | End-to-end MCP regression test |
 
-Session ids are human-readable four-part tokens such as `quick_fox-kind_sloth-bright_auk-calm_mole`. The generator and verifier live in [`src/session_id.rs`](/win/linux/Code/rust/mathematica-mcp/src/session_id.rs).
+## Release state
 
-## Kernel Discovery And Configuration
+The crate is currently **0.1.0**. Do not tag it as stable until a successful native Linux build, unit tests, MCP smoke test, and platform-specific acceptance checks. Windows requires separate native verification. See docs/reference/RELEASE.md for release gates.
 
-Kernel resolution is implemented in [`src/wolfram.rs`](/win/linux/Code/rust/mathematica-mcp/src/wolfram.rs) with platform-specific helpers in [`src/platform/`](/win/linux/Code/rust/mathematica-mcp/src/platform).
-
-Resolution order:
-
-1. platform-specific path from `mathematica-mcp.toml`
-2. `WOLFRAM_KERNEL_PATH` as a legacy override
-3. platform discovery via `wolfram-app-discovery`
-4. executable lookup on `PATH`
-5. fallback to a bare `WolframKernel` command name
-
-### `mathematica-mcp.toml`
-
-Runtime configuration now lives in [`mathematica-mcp.toml`](/win/linux/Code/rust/mathematica-mcp/mathematica-mcp.toml):
-
-```toml
-[kernel]
-linux_path = "/usr/local/Wolfram/WolframEngine/15.0/Executables/WolframKernel"
-windows_path = "C:\\Program Files\\Wolfram Research\\Wolfram\\14.3\\WolframKernel.exe"
-```
-
-At runtime, the binary automatically selects `linux_path` or `windows_path` based on the current platform, expands the path, and validates that it points to a usable kernel executable.
-
-If you want to keep the config somewhere else, set `MATHEMATICA_MCP_CONFIG` to the TOML file path before launching the server.
-
-`WOLFRAM_KERNEL_PATH` is still supported as a fallback for compatibility, but the preferred place for explicit kernel configuration is the TOML file.
-
-## Logging And Observability
-
-Tracing is initialized in [`src/main.rs`](/win/linux/Code/rust/mathematica-mcp/src/main.rs).
-
-Important detail: in server mode, logs are written to `stderr`, not `stdout`, because stdio MCP transport uses `stdout` for protocol traffic.
-
-The logger uses `tracing-subscriber` with `RUST_LOG` support:
-
-```bash
-RUST_LOG=debug cargo run -- serve
-```
-
-## REPL Commands
-
-The REPL implementation lives in [`src/repl.rs`](/win/linux/Code/rust/mathematica-mcp/src/repl.rs).
-
-Supported commands:
-
-- `mathematica_create_session`
-- `mathematica_list_sessions`
-- `mathematica_time`
-- `mathematica_execute_code <code...>`
-- `mathematica_get_finance <SYMBOL> [PROPERTY] [START YYYY-MM-DD] [END YYYY-MM-DD] [INTERVAL]`
-- `mathematica_close_session [SESSION_ID]`
-- `exit`
-- `quit`
-
-REPL history is stored at `.cache/mathematica_repl_history.txt`.
-
-## Build, Run, And Test
-
-### Requirements
-
-- Rust toolchain with Cargo
-- A local Wolfram / Mathematica installation with a usable kernel
-- Native toolchain support needed by the `wstp` dependency on your platform
-
-### Common Commands
-
-```bash
-cargo build
-cargo run -- --help
-cargo run -- serve
-cargo run -- repl
-cargo test
-```
-
-On Windows PowerShell, the REPL and server can be run directly against the configured kernel path from `mathematica-mcp.toml`:
-
-```powershell
-cargo run -- repl
-```
-
-## Repository Layout
-
-Top-level structure:
-
-- [`Cargo.toml`](/win/linux/Code/rust/mathematica-mcp/Cargo.toml)
-  Main crate manifest and dependency list.
-- [`src/`](/win/linux/Code/rust/mathematica-mcp/src)
-  Application source code for the MCP server, REPL, session manager, and Wolfram integration.
-- [`docs/`](/win/linux/Code/rust/mathematica-mcp/docs)
-  Reference notes, migration material, release process notes, and internal project documentation.
-- [`wstp-sys-patched/`](/win/linux/Code/rust/mathematica-mcp/wstp-sys-patched)
-  Local patched replacement for the `wstp-sys` crate used through `[patch.crates-io]`.
-- [`tmp/`](/win/linux/Code/rust/mathematica-mcp/tmp)
-  Scratch/reference area ignored by git for temporary migration inputs or notes.
-- [`target/`](/win/linux/Code/rust/mathematica-mcp/target)
-  Cargo build output.
-
-### `src/` Layout
-
-- [`src/main.rs`](/win/linux/Code/rust/mathematica-mcp/src/main.rs)
-  CLI entrypoint, tracing setup, and subcommand dispatch.
-- [`src/mcp.rs`](/win/linux/Code/rust/mathematica-mcp/src/mcp.rs)
-  MCP server implementation and tool definitions.
-- [`src/repl.rs`](/win/linux/Code/rust/mathematica-mcp/src/repl.rs)
-  Interactive local shell for manual testing.
-- [`src/session.rs`](/win/linux/Code/rust/mathematica-mcp/src/session.rs)
-  Session lifecycle, worker threads, idle cleanup, and eval dispatch.
-- [`src/session_id.rs`](/win/linux/Code/rust/mathematica-mcp/src/session_id.rs)
-  Human-readable session id generation and format validation.
-- [`src/wolfram.rs`](/win/linux/Code/rust/mathematica-mcp/src/wolfram.rs)
-  Kernel discovery, WSTP launch, evaluation wrapper, and finance helper code generation.
-- [`src/platform/mod.rs`](/win/linux/Code/rust/mathematica-mcp/src/platform/mod.rs)
-  Platform abstraction for kernel path discovery and validation.
-- [`src/platform/linux.rs`](/win/linux/Code/rust/mathematica-mcp/src/platform/linux.rs)
-  Linux-specific kernel path handling.
-- [`src/platform/windows.rs`](/win/linux/Code/rust/mathematica-mcp/src/platform/windows.rs)
-  Windows-specific kernel path handling.
-
-### `docs/` Layout
-
-The `docs/reference/` tree is supporting project documentation, not runtime code. It currently contains:
-
-- release and semver notes;
-- migration structure and roadmap documents;
-- tool references used during development;
-- AI/reference notes used while shaping the project.
-
-If you are trying to understand runtime behavior, start with `src/` first. If you are trying to understand maintenance workflow, planned structure, or release process, then `docs/reference/` is relevant.
-
-### `wstp-sys-patched/`
-
-This repository patches `wstp-sys` locally:
-
-- `Cargo.toml` redirects the crate with `[patch.crates-io]`.
-- the directory provides the low-level WSTP FFI crate used by the upstream `wstp` crate;
-- `generated/` contains pre-generated bindings used during builds.
-
-This exists because WSTP integration is the most platform-sensitive part of the stack, and local patching gives the project control over that boundary.
-
-## Dependency Notes
-
-Key runtime dependencies from [`Cargo.toml`](/win/linux/Code/rust/mathematica-mcp/Cargo.toml):
-
-- `rmcp`
-  MCP server framework and stdio transport.
-- `tokio`
-  Async runtime for the server and cleanup tasks.
-- `wstp`
-  Rust bindings over Wolfram's WSTP.
-- `wolfram-expr`
-  Expression handling for WSTP interactions.
-- `wolfram-app-discovery`
-  Kernel path discovery across supported installations.
-- `rustyline`
-  Interactive REPL support.
-- `tracing` and `tracing-subscriber`
-  Structured logging.
-- `clap`
-  CLI parsing.
-- `flume`
-  Cross-thread request channel for session workers.
-
-## Current Limitations
-
-- This project depends on a locally installed proprietary Wolfram runtime.
-- The MCP surface is intentionally small; most Wolfram functionality currently flows through generic code execution rather than many specialized tools.
-- Graphics results are detected with a simple wrapper and returned as Base64 PNG, which is practical but not a full notebook rendering model.
-- Session ids are human-readable and format-validated, but they are not durable credentials and should be treated as local process identifiers.
-
-## Development Notes
-
-Useful files for maintainers:
-
-- [`docs/reference/RELEASE.md`](/win/linux/Code/rust/mathematica-mcp/docs/reference/RELEASE.md)
-  Release and semver policy.
-- [`docs/reference/migration/structure.md`](/win/linux/Code/rust/mathematica-mcp/docs/reference/migration/structure.md)
-  Notes for migration-oriented project organization.
-
-## Status
-
-The repository is already a functional local MCP bridge:
-
-- MCP server mode works over stdio.
-- REPL mode exercises the same kernel/session path locally.
-- Session creation, evaluation, listing, finance lookup, and shutdown are implemented.
-- Linux and Windows kernel discovery paths are present.
-
-The main area to be careful with is environment setup around WSTP and local kernel discovery, since that is the part most likely to vary by machine.
+License: MIT for this project's code; Wolfram and WSTP retain their separate licenses.
