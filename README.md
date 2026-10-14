@@ -4,6 +4,42 @@ A local, Rust-based Model Context Protocol (MCP) server for Wolfram Language and
 
 **Status:** v0.1.0 in development. **Native Linux acceptance smoke verified on 2026-10-14:** EndeavourOS with Rust 1.99.0 and Wolfram 15.0 successfully completed native WSTP build, all 10 Rust unit tests, strict Clippy, and the real-kernel MCP smoke suite (including PNG graphics, kernel-side timeout/recovery and clean shutdown). This is an observed single-machine acceptance run, not a stability certification for every platform or failure mode.
 
+## Embed in other Rust projects
+
+**Rust library support:** the package exports a native, async library named `mathematica_mcp`, in addition to its existing `mathematica-mcp` executable. Embedded callers do not need the MCP JSON-RPC protocol or spawn the executable.
+
+Use a Git dependency in a different Rust project's `Cargo.toml` (the crate has **not** been published to crates.io):
+
+~~~toml
+[dependencies]
+mathematica-mcp = { git = "https://github.com/sguzman/mathematica-mcp" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+anyhow = "1"
+~~~
+
+Use the library inside an existing Tokio runtime:
+
+~~~rust
+use std::time::Duration;
+use mathematica_mcp::Mathematica;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let wolfram = Mathematica::new()?;
+    let session = wolfram.create_session().await?;
+    let answer = wolfram.execute(&session, "40 + 2", Duration::from_secs(20)).await?;
+    println!("{}", answer.output); // 42
+    wolfram.close_session(&session).await?;
+    Ok(())
+}
+~~~
+
+**Public API:** `Mathematica::new`, `create_session`, `execute`, `get_finance` (using `FinanceQuery`), `list_sessions`, `close_session`. The returned `EvalResult` contains Wolfram output, captured logs, and optional Base64 PNG graphics. All library calls use native WSTP, not the MCP server or a subprocess shell wrapper.
+
+**Deployment requirements:** the consuming machine needs an installed, licensed Wolfram kernel and native WSTP development library. A running Tokio runtime is required. Wolfram code executes as the calling OS user and is not sandboxed. The repository uses a patched WSTP FFI crate during its own build; Cargo does not inherit another dependency's `[patch.crates-io]` table. The independent consumer test intentionally validates a fresh downstream dependency resolution, and its native run is an acceptance gate.
+
+The self-contained consumer fixture is in `tests/consumer`. The library also ships `examples/embedded.rs`. The native Linux QA runner tests both the MCP server and the independent consuming binary against the installed kernel. The library has not been certified for Windows or published to crates.io.
+
 ## MCP tools
 
 | Tool | Purpose |
