@@ -132,10 +132,21 @@ def run(executable: str) -> None:
             raise AssertionError("server accepted a fabricated session ID")
         print("PASS: fabricated session ID rejected", flush=True)
 
+        # Separate symbolic Plot evaluation from PNG rasterization so the
+        # report says which phase fails on headless/Wayland Linux systems.
+        print("TEST: evaluate Plot symbolically (no graphics export)", flush=True)
+        head = client.tool(
+            "mathematica_execute_code", session_id=session_id,
+            code="Head[Plot[x, {x, 0, 1}]]", timeout_seconds=15,
+        )["output"]
+        assert head == "Graphics", f"Plot did not evaluate normally: {head}"
+        print("PASS: symbolic Plot evaluation", flush=True)
+
+        print("TEST: graphics PNG export (30-second kernel deadline)", flush=True)
         image = client.tool(
             "mathematica_execute_code",
             session_id=session_id, code="Plot[x, {x, 0, 1}]",
-            timeout_seconds=45,
+            timeout_seconds=30,
         )["graphics"]
         assert image and base64.b64decode(image, validate=True).startswith(
             b"\x89PNG\r\n\x1a\n"
