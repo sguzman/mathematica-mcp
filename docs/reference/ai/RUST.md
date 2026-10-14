@@ -10,5 +10,6 @@ Maintain this as a standalone Rust application with a small, auditable MCP surfa
 - Preserve stderr-only diagnostics in server mode; stdout is reserved for MCP JSON-RPC.
 - Keep machine-specific paths, credential material and private venting out of public commits.
 - When practical, add unit tests and a real-kernel regression case for behavior changes.
+- Do not pin a nightly Rust toolchain or implicitly install compilers on local developer machines. Use stable Rust and the installed default toolchain.
 - Avoid unnecessary dependencies and cross-platform behavior regressions.
 - Split Rust modules by responsibility before they become unmanageably large (roughly 600 lines).
