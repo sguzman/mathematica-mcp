@@ -77,6 +77,26 @@ If even the watchdog expires, that session is **retired** so the server cannot q
 
 **Known native limitation:** Wolfram AbortProtect, stuck external native calls, and certain WSTP failures can prevent immediate kernel cancellation. The currently used wstp crate does not expose kernel child process termination; an unresponsive native worker may remain until process exit. The project does **not** promise guaranteed process-level kill on deadline.
 
+## Wolfram 15 PNG export prerequisite
+
+On Wolfram 15.0, graphics PNG export can trigger a first-use download of WolframResearch's `ImageMetadataTools` paclet from GitHub. On slow or offline systems this appears to hang the kernel even though arithmetic and symbolic plotting work.
+
+**Ordinary builds and MCP requests do not install this package.** Graphics requests fail with an explicit missing-paclet error rather than silently attempting a network download. The separate Linux graphics probe also checks for the paclet before trying an export.
+
+Check installed state without downloads or writes:
+
+~~~sh
+python3 -u scripts/install_image_metadata_tools.py --check
+~~~
+
+If absent, install the official WolframResearch 1.0.0 paclet **once, explicitly**:
+
+~~~sh
+python3 -u scripts/install_image_metadata_tools.py --install
+~~~
+
+The installer downloads the **6.9 MiB** official release to the user's persistent XDG cache, resumes interrupted transfers, prints progress, validates the official SHA-256 checksum, and calls Wolfram `PacletInstall` on the verified local file. A successful installation persists in Wolfram's paclet directory and does not need repeating for every plot. No repository clone or Rust toolchain download is involved.
+
 ## Tests and verification
 
 Unit tests cover signed identifiers, configuration selection, evaluation-wrapper generation, and structured response parsing.
