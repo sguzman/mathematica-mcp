@@ -118,7 +118,19 @@ def run(executable: str) -> None:
             timeout_seconds=20,
         )
         assert result["output"] == "2", result
-        print("PASS: real Wolfram kernel evaluation")
+        print("PASS: real Wolfram kernel evaluation", flush=True)
+
+        sessions = client.tool("mathematica_list_sessions")["sessions"]
+        assert any(s["session_id"] == session_id for s in sessions), sessions
+        print("PASS: session listing includes active session", flush=True)
+
+        try:
+            client.tool("mathematica_execute_code", session_id="invalid-id", code="1+1")
+        except RuntimeError as exc:
+            assert "session" in str(exc).lower(), exc
+        else:
+            raise AssertionError("server accepted a fabricated session ID")
+        print("PASS: fabricated session ID rejected", flush=True)
 
         image = client.tool(
             "mathematica_execute_code",
@@ -128,29 +140,32 @@ def run(executable: str) -> None:
         assert image and base64.b64decode(image, validate=True).startswith(
             b"\x89PNG\r\n\x1a\n"
         ), "graphics must contain a Base64-encoded PNG"
-        print("PASS: graphical result encodes as PNG")
+        print("PASS: graphical result encodes as PNG", flush=True)
 
         try:
             client.tool(
                 "mathematica_execute_code", session_id=session_id,
-                code="Pause[5]; 123", timeout_seconds=1,
+                # CPU-bound but self-terminating if cancellation fails.
+                # TimeConstrained measures kernel CPU time, not Pause wall time.
+                code="Module[{start = AbsoluteTime[]}, While[AbsoluteTime[] - start < 5, Null]; 123]",
+                timeout_seconds=1,
             )
-        except RuntimeError:
-            pass
+        except RuntimeError as exc:
+            assert "time" in str(exc).lower(), f"unexpected failure: {exc}"
         else:
             raise AssertionError("kernel TimeConstrained did not reject slow expression")
-        print("PASS: slow Mathematica code times out")
+        print("PASS: CPU-bound Mathematica code times out", flush=True)
 
         recovery = client.tool(
             "mathematica_execute_code", session_id=session_id,
             code="2+2", timeout_seconds=20,
         )
         assert recovery["output"] == "4", recovery
-        print("PASS: session recovers after a kernel-side timeout")
+        print("PASS: session recovers after a kernel-side timeout", flush=True)
 
         client.tool("mathematica_close_session", session_id=session_id)
         session_id = None
-        print("PASS: clean shutdown")
+        print("PASS: clean shutdown", flush=True)
     finally:
         client.close()
 
