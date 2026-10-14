@@ -34,6 +34,11 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Test MCP smoke client independently
         run: python3 -m unittest discover -s scripts -p "test_*.py"
+      - name: Syntax-check Linux Fish QA runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fish
+          fish -n scripts/linux_qa.fish
 
 # Native WSTP linking and real Wolfram kernel tests are deliberately not claimed
 # by this job. Run scripts/mcp_smoke.py on a properly configured local machine.
