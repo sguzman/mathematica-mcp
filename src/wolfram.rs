@@ -207,19 +207,28 @@ pub fn build_financial_data_code(
   // (and some forms accept a
   // time/interval argument depending on
   // data type)
-  // :contentReference[oaicite:
-  // 12]{index=12}
 
+  if symbol.trim().is_empty() {
+    return Err(anyhow!("symbol must not be empty"));
+  }
   let sym = wl_string(symbol);
   let prop = property.map(wl_string);
 
   let date_range = match (start_date, end_date) {
     | (Some(s), Some(e)) => {
+      let start = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+        .with_context(|| format!("invalid start_date '{s}', expected YYYY-MM-DD"))?;
+      let end = chrono::NaiveDate::parse_from_str(e, "%Y-%m-%d")
+        .with_context(|| format!("invalid end_date '{e}', expected YYYY-MM-DD"))?;
+      if start > end {
+        return Err(anyhow!("start_date must not be after end_date"));
+      }
       let s = iso_date_to_dateobject(s)?;
       let e = iso_date_to_dateobject(e)?;
       Some(format!("{{{s}, {e}}}"))
     }
-    | _ => None
+    | (None, None) => None,
+    | _ => return Err(anyhow!("start_date and end_date must be supplied together"))
   };
 
   let mut args = vec![format!("\"{sym}\"")];
@@ -267,4 +276,31 @@ fn find_in_path(exe: &str) -> Option<PathBuf> {
     }
   }
   None
+}
+
+#[cfg(test)]
+mod finance_tests {
+  use super::*;
+
+  #[test]
+  fn builds_default_finance_query() {
+    assert_eq!(build_financial_data_code("AAPL", None, None, None, None).unwrap(),
+      "FinancialData[\"AAPL\"]");
+  }
+
+  #[test]
+  fn validates_date_ranges() {
+    assert!(build_financial_data_code("AAPL", None, Some("2026-01-01"), None, None).is_err());
+    assert!(build_financial_data_code("AAPL", None, Some("2026-02-01"), Some("2026-01-01"), None).is_err());
+    assert!(build_financial_data_code(" ", None, None, None, None).is_err());
+    let query = build_financial_data_code("AAPL", None, Some("2026-01-01"), Some("2026-02-01"), None).unwrap();
+    assert!(query.contains("\"Close\""));
+    assert!(query.contains("DateObject[{2026, 1, 1}]"));
+  }
+
+  #[test]
+  fn escapes_symbol_as_wolfram_string() {
+    let query = build_financial_data_code("A\"BC", None, None, None, None).unwrap();
+    assert!(query.contains("A\\\"BC"));
+  }
 }
