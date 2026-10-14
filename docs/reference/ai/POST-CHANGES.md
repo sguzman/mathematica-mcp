@@ -1,53 +1,20 @@
-# Post-Change Checklist (Manual)
+# Post-change verification
 
-Run these commands after a change is completed and confirmed to compile. Run
-from the repo root.
+Validation depends on whether Wolfram/WSTP is installed.
 
-Prereqs: `taplo` and `biome` must be installed.
+## Kernel-independent checks
 
-## Script
+- cargo metadata --locked --no-deps
+- DOCS_RS=1 cargo check --locked --all-targets (typecheck only; this is not native linking)
+- python3 -m py_compile scripts/mcp_smoke.py
+- cargo fmt --check, where the repository's nightly rustfmt toolchain is available
 
-- `./scripts/post-change.sh`
+## Real native verification (required before a release)
 
-## Format Rust
+- cargo build --locked
+- cargo test --locked
+- cargo clippy --all-targets -- -D warnings
+- python3 scripts/mcp_smoke.py
+- Repeat platform-specific native smoke tests before advertising that platform as verified.
 
-- `cargo fmt`
-
-## Format TOML
-
-- `taplo fmt`
-
-## Validate TOML
-
-- `taplo validate`
-
-## Format JSON (Biome)
-
-- `biome format --write <files-or-directories>`
-  - Example: `biome format --write path/to/file.json`
-  - Example: `biome format --write .`
-
-## Format Markdown (rumdl)
-
-- `rumdl fmt .`
-
-## Link Check (Lychee)
-
-- `lychee --config lychee.toml .`
-
-## Spelling (typos)
-
-- `typos --config typos.toml`
-
-## Tests
-
-- `cargo test`
-
-## Benchmarks (hyperfine)
-
-- `just bench-ruby-parity`
-- `just bench-rust-baseline`
-
-## Docs
-
-- Update any docs that changed behavior/config/API
+Do not claim these checks passed merely because the commands are documented. Record actual results in the release notes. No nonexistent post-change scripts or benchmarks are required.
