@@ -80,11 +80,16 @@ impl SessionManager {
     };
 
     // Background task for idle cleanup
-    let cleanup_inner = manager.inner.clone();
+    // Hold only a Weak reference, so dropping the final public library
+    // handle releases worker senders instead of leaking the session manager.
+    let cleanup_inner = Arc::downgrade(&manager.inner);
     tokio::spawn(async move {
       let mut interval = tokio::time::interval(Duration::from_secs(60));
       loop {
         interval.tick().await;
+        let Some(cleanup_inner) = cleanup_inner.upgrade() else {
+          break;
+        };
         let now = Utc::now().timestamp();
         let mut to_remove = Vec::new();
 
