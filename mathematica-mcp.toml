@@ -1,3 +1,5 @@
+# Optional per-machine Wolfram kernel paths.
+# Leave unset to discover Wolfram automatically. Do not commit personal paths.
 [kernel]
-linux_path = "/usr/local/Wolfram/WolframEngine/15.0/Executables/WolframKernel"
-windows_path = "C:\\Program Files\\Wolfram Research\\Wolfram\\14.3\\WolframKernel.exe"
+# linux_path = "/opt/Wolfram/Wolfram/14.3/Executables/WolframKernel"
+# windows_path = 'C:\Program Files\Wolfram Research\Wolfram\14.3\WolframKernel.exe'
