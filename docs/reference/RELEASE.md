@@ -4,7 +4,7 @@ Current Cargo version: **0.1.0**. Changes on main are development work, not a ce
 
 ## Acceptance gates
 
-1. Rust formatting, clippy, and the project test suite pass with the pinned toolchain.
+1. Rust formatting, clippy, and the project test suite pass with a compatible locally installed stable Rust toolchain.
 2. A **native Linux WSTP build** completes against an installed Wolfram kernel.
 3. The unit tests pass on the same native machine.
 4. The real-kernel test in scripts/mcp_smoke.py passes: MCP handshake, arithmetic, PNG, timeout, recovery and shutdown.
