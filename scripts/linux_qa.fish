@@ -65,4 +65,9 @@ echo "=== Real-kernel MCP protocol smoke tests ==="
 python3 -u scripts/mcp_smoke.py
 or exit 1
 
-echo "PASS: Linux native WSTP build, unit tests, lint and MCP smoke"
+echo "=== Independent Rust library consumer (native WSTP link) ==="
+# This is a separate Cargo package resolution, not a crate-local example.
+cargo run --manifest-path tests/consumer/Cargo.toml
+or exit 1
+
+echo "PASS: Linux native WSTP build, unit tests, lint, MCP smoke, and Rust library consumer"
