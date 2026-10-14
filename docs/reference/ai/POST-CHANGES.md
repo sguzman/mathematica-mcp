@@ -7,7 +7,7 @@ Validation depends on whether Wolfram/WSTP is installed.
 - cargo metadata --locked --no-deps
 - DOCS_RS=1 cargo check --locked --all-targets (typecheck only; this is not native linking)
 - python3 -m py_compile scripts/mcp_smoke.py
-- cargo fmt --check, where the repository's nightly rustfmt toolchain is available
+- cargo fmt --check, using the installed stable rustfmt component
 
 ## Real native verification (required before a release)
 
