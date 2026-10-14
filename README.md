@@ -21,7 +21,7 @@ Each session has its own worker thread and kernel. Evaluations return InputForm 
 
 ## Prerequisites
 
-- Rust toolchain and Cargo (see rust-toolchain.toml).
+- Your existing compatible Rust toolchain and Cargo (Rust 2024 edition; no repository-pinned nightly or automatic project-specific compiler installation).
 - A locally installed and licensed Mathematica / Wolfram Language kernel.
 - A matching native WSTP development library, discoverable by the patched WSTP build script.
 - Linux is the only release target for this QA cycle. Legacy Windows support remains in source but is not part of the acceptance gate.
@@ -29,6 +29,8 @@ Each session has its own worker thread and kernel. Evaluations return InputForm 
 Wolfram licensing and WSTP redistribution obligations are separate from this project's MIT license.
 
 ## Launch
+
+The repository deliberately **does not contain a `rust-toolchain.toml`**. Cargo and rustfmt use your existing toolchain and default Rustup selection. If you have explicitly selected another toolchain using `RUSTUP_TOOLCHAIN` or a directory override, Rustup respects that separate setting.
 
 For an interactive local REPL:
 
