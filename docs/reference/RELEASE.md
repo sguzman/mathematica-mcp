@@ -1,62 +1,25 @@
-# Release & SemVer Policy
+# Release and maintenance policy
 
-This repo uses Conventional Commits and git-cliff to generate changelogs, with
-cargo-release for coordinated version bumps.
+Current Cargo version: **0.1.0**. Changes on main are development work, not a certified release.
 
-## Commit Conventions
+## Acceptance gates
 
-Use Conventional Commits:
+1. Rust formatting, clippy, and the project test suite pass with the pinned toolchain.
+2. A **native Linux WSTP build** completes against an installed Wolfram kernel.
+3. The unit tests pass on the same native machine.
+4. The real-kernel test in scripts/mcp_smoke.py passes: MCP handshake, arithmetic, PNG, timeout, recovery and shutdown.
+5. Verify configuration discovery, explicitly missing config errors and clean stdout JSON-RPC.
+6. Repeat a native build and smoke test on Windows before claiming Windows release parity.
 
-- `feat:` new user-facing functionality
-- `fix:` bug fixes
-- `docs:` documentation changes
-- `refactor:` internal refactors without behavior change
-- `perf:` performance improvements
-- `test:` test changes
-- `chore:` maintenance tasks
-- `build:` build/tooling changes
-- `ci:` CI pipeline changes
+GitHub CI may typecheck without a kernel using generated bindings, but such a check does not prove native WSTP linkage or runtime functionality.
 
-Add `!` for breaking changes (e.g., `feat!: ...`).
+## Version policy
 
-## Versioning Policy
+- Use Conventional Commits.
+- Stay in 0.x until runtime, protocol, and configuration semantics stabilize.
+- A signed-session-ID format is incompatible with the original format; session IDs are intentionally valid only during the owning process.
+- Do not tag 1.0.0 until native integration tests pass on all advertised platforms and the supported contract is documented.
 
-- Stay in `0.x` while APIs and config schemas are still evolving.
-- Promote to `1.0.0` once server API + config schemas are stable and at least
-  one client ships.
+## Publishing
 
-## Changelog
-
-Generate the changelog with git-cliff:
-
-```bash
-git cliff --config cliff.toml --output CHANGELOG.md
-```
-
-## Release Flow (manual)
-
-1. Update version with cargo-release (workspace)
-2. Generate changelog
-3. Tag
-
-the release (no publish)
-
-Example:
-
-```bash
-cargo release patch --workspace
-```
-
-Notes:
-
-- `publish = false` in `release.toml` so crates are not published.
-- `pre-release-hook` runs git-cliff to generate CHANGELOG.md for every release.
-- `cliff.toml` expects `[remote.github]` `owner`/ `repo` to be set (and the
-  issue-link replace URL updated) so changelog links point to the right project
-  before running `git cliff`.
-
-## Files
-
-- `cliff.toml` – git-cliff config
-- `release.toml` – cargo-release config
-- `CHANGELOG.md` – generated changelog (optional until first release)
+Only after the gates succeed: update Cargo.toml, write the change log, create an annotated tag for the verified source, and publish artifacts only where Wolfram licensing permits it. Avoid distributing proprietary SDK binaries beyond the terms of the relevant Wolfram agreement.
