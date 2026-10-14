@@ -27,6 +27,7 @@ use crate::wolfram::{
 pub enum SessionRequest {
   Eval {
     code:  String,
+    timeout: Duration,
     reply: tokio::sync::oneshot::Sender<anyhow::Result<EvalResult>>
   },
   Shutdown {
@@ -85,28 +86,19 @@ impl SessionManager {
         }
 
         for id in to_remove {
-          tracing::info!(session_id = %id, "closing idle session");
-          // We don't want to hold the lock while joining threads,
-          // but close_session handles its own locking.
-          // Wait, we need a way to close without double locking or deadlocking.
-          // Let's just remove and shutdown here.
+          // Do not retire a session that was used since the idle scan.
           let handle = {
             let mut map = cleanup_inner.lock().await;
-            map.remove(&id)
+            let still_idle = map.get(&id).is_some_and(|h| {
+              now - h.last_accessed.load(Ordering::SeqCst) > 1800
+            });
+            if still_idle { map.remove(&id) } else { None }
           };
-
-          if let Some(h) = handle {
-            let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-            if h
-              .tx
-              .send(SessionRequest::Shutdown {
-                reply: reply_tx
-              })
-              .is_ok()
-            {
-              let _ = reply_rx.await;
+          if let Some(handle) = handle {
+            tracing::info!(session_id = %id, "closing idle session");
+            if let Err(error) = SessionManager::shutdown_handle(handle).await {
+              tracing::warn!(session_id = %id, %error, "idle shutdown incomplete");
             }
-            let _ = tokio::task::spawn_blocking(move || h.join.join()).await;
           }
         }
       }
@@ -127,7 +119,7 @@ impl SessionManager {
     let kernel_cmd = wolfram::resolve_kernel_cmd()?;
 
     let (tx, rx) = flume::unbounded::<SessionRequest>();
-    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<anyhow::Result<()>>();
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<anyhow::Result<()>>();
 
     let join = thread::spawn(move || {
       let mut kernel = match wolfram::launch_link(&kernel_cmd) {
@@ -148,9 +140,10 @@ impl SessionManager {
         match req {
           | SessionRequest::Eval {
             code,
+            timeout,
             reply
           } => {
-            let res = wolfram::evaluate(link, &code);
+            let res = wolfram::evaluate(link, &code, timeout);
             let _ = reply.send(res);
           }
           | SessionRequest::Shutdown {
@@ -166,8 +159,8 @@ impl SessionManager {
       tracing::info!("session thread exited");
     });
 
-    match ready_rx.recv() {
-      | Ok(Ok(())) => {
+    match tokio::time::timeout(Duration::from_secs(60), ready_rx).await {
+      | Ok(Ok(Ok(()))) => {
         let mut map = self.inner.lock().await;
         map.insert(session_id.clone(), SessionHandle {
           created_at: Utc::now(),
@@ -177,8 +170,9 @@ impl SessionManager {
         });
         Ok(session_id)
       }
-      | Ok(Err(e)) => Err(e),
-      | Err(e) => Err(anyhow!("session startup channel failed: {e:?}"))
+      | Ok(Ok(Err(e))) => Err(e),
+      | Ok(Err(e)) => Err(anyhow!("session startup channel failed: {e:?}")),
+      | Err(_) => Err(anyhow!("kernel startup timed out after 60 seconds"))
     }
   }
 
@@ -188,6 +182,10 @@ impl SessionManager {
     code: &str,
     timeout: Duration
   ) -> anyhow::Result<EvalResult> {
+    if timeout.is_zero() || timeout > Duration::from_secs(3600) {
+      return Err(anyhow!("timeout_seconds must be between 1 and 3600"));
+    }
+
     let handle = {
       let map = self.inner.lock().await;
       let h =
@@ -200,14 +198,27 @@ impl SessionManager {
     handle
       .send(SessionRequest::Eval {
         code:  code.to_string(),
+        timeout,
         reply: reply_tx
       })
       .map_err(|e| anyhow!("failed to send eval request: {e:?}"))?;
 
-    match tokio::time::timeout(timeout, reply_rx).await {
+    // Allow the kernel timer time to return structured results over WSTP.
+    match tokio::time::timeout(timeout + Duration::from_secs(10), reply_rx).await {
       | Ok(Ok(res)) => res,
       | Ok(Err(e)) => Err(anyhow!("eval reply canceled: {e:?}")),
-      | Err(_) => Err(anyhow!("evaluation timed out after {timeout:?}"))
+      | Err(_) => {
+        // A native WSTP operation or AbortProtect may ignore TimeConstrained.
+        // Retire this session to prevent subsequent evaluations piling up.
+        tracing::warn!(session_id = %session_id, "unresponsive kernel; retiring session");
+        if let Some(handle) = self.inner.lock().await.remove(session_id) {
+          let (reply, _response) = tokio::sync::oneshot::channel();
+          let _ = handle.tx.send(SessionRequest::Shutdown { reply });
+          // A blocked native call cannot safely be joined; detach its worker.
+          drop(handle);
+        }
+        Err(anyhow!("kernel failed to respond within timeout plus 10s; session retired"))
+      }
     }
   }
 
@@ -222,22 +233,30 @@ impl SessionManager {
         .ok_or_else(|| anyhow!("session not found or already closed: {session_id}"))?
     };
 
+    Self::shutdown_handle(handle).await?;
+
+    Ok(())
+  }
+
+  async fn shutdown_handle(handle: SessionHandle) -> anyhow::Result<()> {
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
     handle
       .tx
-      .send(SessionRequest::Shutdown {
-        reply: reply_tx
-      })
-      .map_err(|e| anyhow!("failed to send shutdown: {e:?}"))?;
+      .send(SessionRequest::Shutdown { reply: reply_tx })
+      .map_err(|e| anyhow!("failed to request worker shutdown: {e:?}"))?;
 
-    let _ = reply_rx.await;
+    // Never let a blocked kernel hang the close tool or the cleanup loop.
+    tokio::time::timeout(Duration::from_secs(10), reply_rx)
+      .await
+      .map_err(|_| anyhow!("worker shutdown acknowledgement timed out"))?
+      .map_err(|e| anyhow!("worker shutdown channel closed: {e:?}"))?;
 
-    tokio::task::spawn_blocking(move || {
-      let _ = handle.join.join();
-    })
-    .await
-    .map_err(|e| anyhow!("failed to join session thread: {e:?}"))?;
-
+    let joined = tokio::task::spawn_blocking(move || handle.join.join());
+    tokio::time::timeout(Duration::from_secs(5), joined)
+      .await
+      .map_err(|_| anyhow!("worker exit timed out"))?
+      .map_err(|e| anyhow!("worker join task failed: {e:?}"))?
+      .map_err(|e| anyhow!("worker thread panicked: {e:?}"))?;
     Ok(())
   }
 
