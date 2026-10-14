@@ -1,0 +1,31 @@
+name: Source checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  typecheck:
+    name: Rust typecheck (without licensed Wolfram runtime)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify Cargo metadata
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+      - name: Compile-check including unit tests
+        env:
+          DOCS_RS: "1"
+        run: cargo check --locked --all-targets
+      - name: Validate smoke suite syntax
+        run: python3 -m py_compile scripts/mcp_smoke.py
+
+# Native WSTP linking and real Wolfram kernel tests are deliberately not claimed
+# by this job. Run scripts/mcp_smoke.py on a properly configured local machine.
