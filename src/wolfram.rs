@@ -88,18 +88,20 @@ pub struct EvalResult {
 fn evaluation_wrapper(code: &str, timeout: std::time::Duration) -> String {
   let seconds = timeout.as_secs();
   format!(
-    "ExportString[TimeConstrained[Module[{{res, graphics, rendered}}, \
+    "ExportString[TimeConstrained[Module[{{res, graphics, rendered, graphicsError = Null}}, \
      res = Check[({code}), $Failed]; \
      graphics = If[MemberQ[{{Graphics, Graphics3D, Graph, GeoGraphics, Legended}}, Head[res]], \
-       (Print[\"mathematica-mcp:graphics:start\"]; \
-        rendered = Quiet[Check[ExportByteArray[res, \"PNG\"], $Failed]]; \
-        Print[\"mathematica-mcp:graphics:end\"]; \
-        If[Head[rendered] === ByteArray, BaseEncode[rendered], Null]), \
+       If[PacletFind[\"ImageMetadataTools\"] === {{}}, \
+         (graphicsError = \"ImageMetadataTools is not installed. Run python3 -u scripts/install_image_metadata_tools.py --install once, then retry graphics.\"; Null), \
+         (Print[\"mathematica-mcp:graphics:start\"]; \
+          rendered = Quiet[Check[ExportByteArray[res, \"PNG\"], $Failed]]; \
+          Print[\"mathematica-mcp:graphics:end\"]; \
+          If[Head[rendered] === ByteArray, BaseEncode[rendered], Null])], \
        Null]; \
      <|\"output\" -> ToString[res, InputForm], \"graphics\" -> graphics, \
-     \"timed_out\" -> False|>], \
+     \"graphics_error\" -> graphicsError, \"timed_out\" -> False|>], \
      {seconds}, <|\"output\" -> \"$Aborted\", \"graphics\" -> Null, \
-     \"timed_out\" -> True|>], \"JSON\"]"
+     \"graphics_error\" -> Null, \"timed_out\" -> True|>], \"JSON\"]"
   )
 }
 
@@ -107,6 +109,9 @@ fn parse_evaluation_response(json_str: &str, logs: Vec<String>) -> anyhow::Resul
   let val: serde_json::Value = serde_json::from_str(json_str)?;
   if val["timed_out"].as_bool() == Some(true) {
     return Err(anyhow!("evaluation exceeded Wolfram TimeConstrained limit"));
+  }
+  if let Some(error) = val["graphics_error"].as_str() {
+    return Err(anyhow!("{error}"));
   }
   let output = val["output"]
     .as_str()
@@ -178,6 +183,8 @@ mod evaluation_tests {
     assert!(wrapper.contains("ExportString[TimeConstrained[Module["));
     assert!(wrapper.contains("res = Check[(Plot[Sin[x], {x, 0, 1}]), $Failed]"));
     assert!(wrapper.contains("ExportByteArray[res, \"PNG\"]"));
+    assert!(wrapper.contains("PacletFind[\"ImageMetadataTools\"] === {}"));
+    assert!(wrapper.contains("install_image_metadata_tools.py --install"));
     assert!(wrapper.contains("BaseEncode[rendered]"));
     assert!(wrapper.contains("mathematica-mcp:graphics:start"));
     assert!(wrapper.contains("mathematica-mcp:graphics:end"));
@@ -203,6 +210,8 @@ mod evaluation_tests {
     ).is_err());
     assert!(parse_evaluation_response(r#"{"graphics":null}"#, vec![]).is_err());
     assert!(parse_evaluation_response("not JSON", vec![]).is_err());
+    let missing_paclet = r#"{"output":"Graphics[]","graphics":null,"graphics_error":"ImageMetadataTools is not installed","timed_out":false}"#;
+    assert!(parse_evaluation_response(missing_paclet, vec![]).unwrap_err().to_string().contains("ImageMetadataTools"));
   }
 }
 
