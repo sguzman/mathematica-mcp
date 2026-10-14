@@ -82,20 +82,24 @@ pub struct EvalResult {
   pub graphics: Option<String> // Base64 PNG
 }
 
-// The inner kernel timer normally cancels an evaluation before the outer
-// Rust watchdog fires. The watchdog additionally detects a stuck WSTP link.
+// One Wolfram deadline covers evaluation AND potentially expensive PNG export.
+// The previous wrapper timed only user code, allowing front-end-backed graphics
+// rendering to hang the WSTP link outside TimeConstrained.
 fn evaluation_wrapper(code: &str, timeout: std::time::Duration) -> String {
   let seconds = timeout.as_secs();
   format!(
-    "ExportString[Module[{{res, graphics, marker, timedOut}}, \
-     marker = Unique[\"mathematicaMcpTimeout\"]; \
-     res = TimeConstrained[Check[({code}), $Failed], {seconds}, marker]; \
-     timedOut = SameQ[res, marker]; \
-     graphics = If[timedOut, Null, Replace[res, \
-     {{g_ /; MemberQ[{{Graphics, Graphics3D, Graph, GeoGraphics, Legended}}, Head[g]] :> \
-     Quiet[Check[BaseEncode[ExportByteArray[g, \"PNG\"]], Null]], _ :> Null}}]]; \
+    "ExportString[TimeConstrained[Module[{{res, graphics, rendered}}, \
+     res = Check[({code}), $Failed]; \
+     graphics = If[MemberQ[{{Graphics, Graphics3D, Graph, GeoGraphics, Legended}}, Head[res]], \
+       (Print[\"mathematica-mcp:graphics:start\"]; \
+        rendered = Quiet[Check[ExportByteArray[res, \"PNG\"], $Failed]]; \
+        Print[\"mathematica-mcp:graphics:end\"]; \
+        If[Head[rendered] === ByteArray, BaseEncode[rendered], Null]), \
+       Null]; \
      <|\"output\" -> ToString[res, InputForm], \"graphics\" -> graphics, \
-     \"timed_out\" -> timedOut|>], \"JSON\"]"
+     \"timed_out\" -> False|>], \
+     {seconds}, <|\"output\" -> \"$Aborted\", \"graphics\" -> Null, \
+     \"timed_out\" -> True|>], \"JSON\"]"
   )
 }
 
@@ -146,7 +150,11 @@ pub fn evaluate(
         if let Ok(expr) = link.get_expr()
           && let ExprKind::String(s) = expr.kind()
         {
-          logs.push(s.clone());
+          if matches!(s.as_str(), "mathematica-mcp:graphics:start" | "mathematica-mcp:graphics:end") {
+            tracing::info!(stage = %s, "Wolfram graphics stage");
+          } else {
+            logs.push(s.clone());
+          }
         }
         link.new_packet().map_err(|e| anyhow!("new_packet failed: {e:?}"))?;
       }
@@ -165,11 +173,16 @@ mod evaluation_tests {
   use super::*;
 
   #[test]
-  fn wrapper_limits_kernel_work_and_encodes_png() {
+  fn wrapper_limits_graphics_export_as_well_as_evaluation() {
     let wrapper = evaluation_wrapper("Plot[Sin[x], {x, 0, 1}]", std::time::Duration::from_secs(7));
-    assert!(wrapper.contains("TimeConstrained[Check[(Plot[Sin[x], {x, 0, 1}]), $Failed], 7"));
-    assert!(wrapper.contains("BaseEncode[ExportByteArray[g, \"PNG\"]]"));
-    assert!(wrapper.contains("\"timed_out\" -> timedOut"));
+    assert!(wrapper.contains("ExportString[TimeConstrained[Module["));
+    assert!(wrapper.contains("res = Check[(Plot[Sin[x], {x, 0, 1}]), $Failed]"));
+    assert!(wrapper.contains("ExportByteArray[res, \"PNG\"]"));
+    assert!(wrapper.contains("BaseEncode[rendered]"));
+    assert!(wrapper.contains("mathematica-mcp:graphics:start"));
+    assert!(wrapper.contains("mathematica-mcp:graphics:end"));
+    assert!(wrapper.contains("7, <|\"output\" -> \"$Aborted\""));
+    assert!(wrapper.contains("\"timed_out\" -> True"));
   }
 
   #[test]
