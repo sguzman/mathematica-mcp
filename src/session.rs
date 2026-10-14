@@ -37,6 +37,18 @@ pub enum SessionRequest {
 }
 
 #[derive(Debug)]
+struct ActiveEvaluationGuard {
+  in_flight: Arc<AtomicUsize>,
+  last_accessed: Arc<AtomicI64>
+}
+
+impl Drop for ActiveEvaluationGuard {
+  fn drop(&mut self) {
+    self.last_accessed.store(Utc::now().timestamp(), Ordering::SeqCst);
+    self.in_flight.fetch_sub(1, Ordering::SeqCst);
+  }
+}
+
 pub struct SessionHandle {
   pub created_at:    DateTime<Utc>,
   pub last_accessed: Arc<AtomicI64>,
@@ -190,13 +202,16 @@ impl SessionManager {
       return Err(anyhow!("timeout_seconds must be between 1 and 3600"));
     }
 
-    let (handle, in_flight) = {
+    let (handle, _guard) = {
       let map = self.inner.lock().await;
       let h =
         map.get(session_id).ok_or_else(|| anyhow!("session not found or closed: {session_id}"))?;
       h.last_accessed.store(Utc::now().timestamp(), Ordering::SeqCst);
       h.in_flight.fetch_add(1, Ordering::SeqCst);
-      (h.tx.clone(), h.in_flight.clone())
+      (h.tx.clone(), ActiveEvaluationGuard {
+        in_flight: h.in_flight.clone(),
+        last_accessed: h.last_accessed.clone()
+      })
     };
 
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
@@ -205,13 +220,11 @@ impl SessionManager {
       timeout,
       reply: reply_tx
     }) {
-      in_flight.fetch_sub(1, Ordering::SeqCst);
       return Err(anyhow!("session request queue unavailable or full: {error:?}"));
     }
 
     // Allow the kernel timer time to return structured results over WSTP.
     let response = tokio::time::timeout(timeout + Duration::from_secs(10), reply_rx).await;
-    in_flight.fetch_sub(1, Ordering::SeqCst);
     match response {
       | Ok(Ok(res)) => res,
       | Ok(Err(e)) => Err(anyhow!("eval reply canceled: {e:?}")),
@@ -236,9 +249,13 @@ impl SessionManager {
   ) -> anyhow::Result<()> {
     let handle = {
       let mut map = self.inner.lock().await;
-      map
-        .remove(session_id)
+      let busy = map.get(session_id)
         .ok_or_else(|| anyhow!("session not found or already closed: {session_id}"))?
+        .in_flight.load(Ordering::SeqCst);
+      if busy > 0 {
+        return Err(anyhow!("session has {busy} active evaluations; close after they finish"));
+      }
+      map.remove(session_id).expect("checked session exists")
     };
 
     Self::shutdown_handle(handle).await?;
@@ -282,5 +299,25 @@ impl SessionManager {
         }
       })
       .collect()
+  }
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+  use super::*;
+
+  #[test]
+  fn evaluation_guard_releases_active_counter() {
+    let in_flight = Arc::new(AtomicUsize::new(1));
+    let last_accessed = Arc::new(AtomicI64::new(0));
+    {
+      let _guard = ActiveEvaluationGuard {
+        in_flight: in_flight.clone(),
+        last_accessed: last_accessed.clone()
+      };
+      assert_eq!(in_flight.load(Ordering::SeqCst), 1);
+    }
+    assert_eq!(in_flight.load(Ordering::SeqCst), 0);
+    assert!(last_accessed.load(Ordering::SeqCst) > 0);
   }
 }
