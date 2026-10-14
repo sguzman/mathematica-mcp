@@ -1,87 +1,76 @@
-//! src/session_id.rs
+//! Readable, HMAC-signed session IDs.
 //!
-//! A small, **readable** replacement
-//! for Python's
-//! `animalid.AnimalIdGenerator`.
-//!
-//! Goal:
-//! - Generate human-friendly session IDs like
-//!   `quick_fox-kind_sloth-bright_auk-calm_mole`
-//! - Allow `verify(session_id)` to detect tampering (no extra signature suffix
-//!   in the ID)
-//!
-//! How it works (simple + robust):
-//! - We encode **44 bits** into **4 words** (each word encodes 11 bits).
-//! - Those 44 bits are: 32-bit random payload + 12-bit HMAC checksum.
-//! - The checksum is derived from `HMAC-SHA256(secret_key, payload32)` (top 12
-//!   bits).
-//! - On verify: decode words -> recover payload32 + checksum12 -> recompute
-//!   checksum12 -> compare.
-//!
-//! This mirrors the intent of Python
-//! `AnimalIdGenerator.generate()` and
-//! `.verify()` without needing to
-//! append a signature string.
+//! Four adjective_animal tokens give 44 bits of entropy. A 128-bit HMAC
+//! tag prevents an arbitrary, well-formed string from passing verification.
+//! The secret changes when the server restarts; sessions are not persistent.
 
+use hmac::{Hmac, Mac};
 use rand::TryRngCore;
+use sha2::Sha256;
 
 pub type SessionIdSigner = AnimalIdGenerator;
 
-#[derive(Clone, Debug, Default)]
-pub struct AnimalIdGenerator {}
+#[derive(Clone)]
+pub struct AnimalIdGenerator {
+  secret: [u8; 32]
+}
 
-impl AnimalIdGenerator {
-  pub fn from_env() -> Self {
-    Self {}
-  }
-
-  /// Generate a new session id.
-  pub fn generate(&self) -> String {
+impl Default for AnimalIdGenerator {
+  fn default() -> Self {
+    let mut secret = [0u8; 32];
     let mut rng = rand::rngs::OsRng;
-    let mut words = [String::new(), String::new(), String::new(), String::new()];
-
-    for word in &mut words {
-      let mut buf = [0u8; 2];
-      rng.try_fill_bytes(&mut buf).expect("os rng should be available");
-      let idx = (u16::from_be_bytes(buf) & 0x7ff) as u16; // 0..2047
-      *word = index_to_word(idx);
-    }
-
-    words.join("-")
-  }
-
-  /// Verify that a session id is well-formed.
-  pub fn verify(
-    &self,
-    session_id: &str
-  ) -> bool {
-    let parts: Vec<&str> = session_id.split('-').collect();
-    if parts.len() != 4 {
-      return false;
-    }
-
-    for part in parts {
-      if word_to_index(part).is_none() {
-        return false;
-      }
-    }
-
-    true
+    rng.try_fill_bytes(&mut secret).expect("OS randomness unavailable");
+    Self { secret }
   }
 }
 
-/// We need a 2048-entry "wordlist"
-/// (because each word encodes 11 bits).
-///
-/// Instead of shipping a gigantic
-/// 2048-word list, we generate 2048
-/// unique tokens by combining 64
-/// adjectives × 32 animals = 2048.
-///
-/// Each encoded "word" looks like
-/// `quick_fox` (underscore is safe
-/// because the ID uses `-`
-/// as the separator between words).
+impl AnimalIdGenerator {
+  pub fn from_env() -> Self {
+    Self::default()
+  }
+
+  pub fn generate(&self) -> String {
+    let mut rng = rand::rngs::OsRng;
+    let mut words = [String::new(), String::new(), String::new(), String::new()];
+    for word in &mut words {
+      let mut buf = [0u8; 2];
+      rng.try_fill_bytes(&mut buf).expect("OS randomness unavailable");
+      let idx = u16::from_be_bytes(buf) & 0x07ff;
+      *word = index_to_word(idx);
+    }
+    let readable = words.join("-");
+    format!("{}-{}", readable, self.sign(&readable))
+  }
+
+  pub fn verify(&self, session_id: &str) -> bool {
+    let Some((readable, tag)) = session_id.rsplit_once('-') else {
+      return false;
+    };
+    let words: Vec<&str> = readable.split('-').collect();
+    if words.len() != 4 || words.iter().any(|word| word_to_index(word).is_none()) {
+      return false;
+    }
+    if tag.len() != 32 || !tag.bytes().all(|b| b.is_ascii_hexdigit()) {
+      return false;
+    }
+
+    let expected = self.sign(readable);
+    // Constant-time comparison over the fixed-size tag.
+    let mut difference = 0u8;
+    for (a, b) in expected.bytes().zip(tag.bytes()) {
+      difference |= a ^ b.to_ascii_lowercase();
+    }
+    difference == 0
+  }
+
+  fn sign(&self, readable: &str) -> String {
+    let mut mac = Hmac::<Sha256>::new_from_slice(&self.secret).expect("valid HMAC key");
+    mac.update(readable.as_bytes());
+    let digest = mac.finalize().into_bytes();
+    digest[..16].iter().map(|byte| format!("{byte:02x}")).collect()
+  }
+}
+
 const ADJECTIVES: [&str; 64] = [
   "alert", "ancient", "brave", "bright", "brisk", "calm", "clever", "cool", "curious", "daring",
   "eager", "earthy", "fast", "fierce", "gentle", "glad", "golden", "grand", "happy", "hardy",
@@ -100,23 +89,14 @@ const ANIMALS: [&str; 32] = [
 
 fn index_to_word(idx: u16) -> String {
   debug_assert!(idx < 2048);
-  let adj_i = (idx / 32) as usize; // 0..63
-  let animal_i = (idx % 32) as usize; // 0..31
-  format!("{}_{}", ADJECTIVES[adj_i], ANIMALS[animal_i])
+  format!("{}_{}", ADJECTIVES[(idx / 32) as usize], ANIMALS[(idx % 32) as usize])
 }
 
 fn word_to_index(word: &str) -> Option<u16> {
   let (adj, animal) = word.split_once('_')?;
-
   let adj_i = ADJECTIVES.iter().position(|&w| w == adj)?;
   let animal_i = ANIMALS.iter().position(|&w| w == animal)?;
-
-  let idx = adj_i * 32 + animal_i;
-  if idx < 2048 {
-    Some(idx as u16)
-  } else {
-    None
-  }
+  Some((adj_i * 32 + animal_i) as u16)
 }
 
 #[cfg(test)]
@@ -124,23 +104,25 @@ mod tests {
   use super::*;
 
   #[test]
-  fn generate_then_verify_ok() {
-    let g = AnimalIdGenerator::default();
-    let id = g.generate();
-    assert!(g.verify(&id), "generated id should verify: {id}");
+  fn generated_id_is_signed_by_this_server_only() {
+    let issuer = AnimalIdGenerator::default();
+    let different_issuer = AnimalIdGenerator::default();
+    let id = issuer.generate();
+    assert!(issuer.verify(&id));
+    assert!(!different_issuer.verify(&id));
+    assert_eq!(id.split('-').count(), 5);
   }
 
   #[test]
-  fn wrong_format_fails() {
-    let g = AnimalIdGenerator::default();
-    assert!(!g.verify("not-even-close"));
-    assert!(!g.verify("a_b-c_d")); // only 2 words, should be 4
-    assert!(!g.verify("alert_fox-ancient_wolf-brave_bear")); // 3 words
-  }
-
-  #[test]
-  fn unknown_word_fails() {
-    let g = AnimalIdGenerator::default();
-    assert!(!g.verify("alert_fox-ancient_wolf-brave_bear-unknown_animal"));
+  fn modified_or_malformed_id_rejected() {
+    let issuer = AnimalIdGenerator::default();
+    let original = issuer.generate();
+    assert!(!issuer.verify("not-even-close"));
+    assert!(!issuer.verify("alert_fox-ancient_wolf-brave_bear-calm_cat"));
+    let (words, tag) = original.rsplit_once('-').unwrap();
+    let mut changed = tag.as_bytes().to_vec();
+    changed[0] = if changed[0] == b'0' { b'1' } else { b'0' };
+    assert!(!issuer.verify(&format!("{words}-{}", String::from_utf8(changed).unwrap())));
+    assert!(!issuer.verify(&format!("unknown_animal-{words}-{tag}")));
   }
 }
