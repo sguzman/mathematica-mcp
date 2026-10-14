@@ -32,7 +32,7 @@ mod session;
 mod session_id;
 mod wolfram;
 
-pub use api::Mathematica;
+pub use api::{FinanceQuery, Mathematica};
 pub use session::SessionInfo;
 pub use wolfram::{EvalResult, build_financial_data_code};
 
