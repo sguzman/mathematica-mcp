@@ -82,22 +82,46 @@ pub struct EvalResult {
   pub graphics: Option<String> // Base64 PNG
 }
 
+// The inner kernel timer normally cancels an evaluation before the outer
+// Rust watchdog fires. The watchdog additionally detects a stuck WSTP link.
+fn evaluation_wrapper(code: &str, timeout: std::time::Duration) -> String {
+  let seconds = timeout.as_secs();
+  format!(
+    "ExportString[Module[{{res, graphics, marker, timedOut}}, \
+     marker = Unique[\"mathematicaMcpTimeout\"]; \
+     res = TimeConstrained[Check[({code}), $Failed], {seconds}, marker]; \
+     timedOut = SameQ[res, marker]; \
+     graphics = If[timedOut, Null, Replace[res, \
+     {{g_ /; MemberQ[{{Graphics, Graphics3D, Graph, GeoGraphics, Legended}}, Head[g]] :> \
+     Quiet[Check[BaseEncode[ExportByteArray[g, \"PNG\"]], Null]], _ :> Null}}]]; \
+     <|\"output\" -> ToString[res, InputForm], \"graphics\" -> graphics, \
+     \"timed_out\" -> timedOut|>], \"JSON\"]"
+  )
+}
+
+fn parse_evaluation_response(json_str: &str, logs: Vec<String>) -> anyhow::Result<EvalResult> {
+  let val: serde_json::Value = serde_json::from_str(json_str)?;
+  if val["timed_out"].as_bool() == Some(true) {
+    return Err(anyhow!("evaluation exceeded Wolfram TimeConstrained limit"));
+  }
+  let output = val["output"]
+    .as_str()
+    .ok_or_else(|| anyhow!("Wolfram response missing string 'output'"))?
+    .to_string();
+  let graphics = match &val["graphics"] {
+    serde_json::Value::String(s) => Some(s.clone()),
+    serde_json::Value::Null => None,
+    _ => return Err(anyhow!("Wolfram response graphics must be Base64 text or null"))
+  };
+  Ok(EvalResult { output, logs, graphics })
+}
+
 pub fn evaluate(
   link: &mut Link,
-  code: &str
+  code: &str,
+  timeout: std::time::Duration
 ) -> anyhow::Result<EvalResult> {
-  // We wrap the code in a Module that detects graphics and returns a List:
-  // {ToString[res, InputForm], If[graphicsQ[res],
-  // Base64Encode[ExportByteArray[res, "PNG"]], Null]} where graphicsQ checks
-  // for common graphics heads.
-
-  let wrapper = format!(
-    "ExportString[ Module[{{res, graphics}}, res = Check[{code}, $Failed]; graphics = \
-     Replace[res, {{ g_ /; MemberQ[{{Graphics, Graphics3D, BoxData, Graph, GeoGraphics, Legended, \
-     Placed}}, Head[g]] :> ExportString[g, \"PNG\"], _ :> Null }}]; <|\"output\" -> ToString[res, \
-     InputForm], \"graphics\" -> graphics|> ], \"JSON\" ]"
-  );
-
+  let wrapper = evaluation_wrapper(code, timeout);
   link
     .put_eval_packet(&Expr::normal(wolfram_expr::Symbol::new("System`ToExpression"), vec![
       Expr::string(&wrapper),
@@ -109,26 +133,14 @@ pub fn evaluate(
   let mut logs = Vec::new();
   loop {
     let pkt = link.raw_next_packet().map_err(|e| anyhow!("raw_next_packet failed: {e:?}"))?;
-
     match pkt {
       | wstp::sys::RETURNPKT => {
         let result_expr = link.get_expr().map_err(|e| anyhow!("get_expr failed: {e:?}"))?;
         link.new_packet().map_err(|e| anyhow!("new_packet failed: {e:?}"))?;
-
-        let json_str = match result_expr.kind() {
-          | ExprKind::String(s) => s.clone(),
-          | _ => return Err(anyhow!("expected JSON string from kernel, got: {result_expr:?}"))
+        let ExprKind::String(json_str) = result_expr.kind() else {
+          return Err(anyhow!("expected JSON string from kernel, got: {result_expr:?}"));
         };
-
-        let val: serde_json::Value = serde_json::from_str(&json_str)?;
-        let output = val["output"].as_str().unwrap_or("").to_string();
-        let graphics = val["graphics"].as_str().map(|s| s.to_string());
-
-        return Ok(EvalResult {
-          output,
-          logs,
-          graphics
-        });
+        return parse_evaluation_response(json_str, logs);
       }
       | wstp::sys::TEXTPKT => {
         if let Ok(expr) = link.get_expr() {
@@ -145,6 +157,39 @@ pub fn evaluate(
         link.new_packet().map_err(|e| anyhow!("new_packet failed: {e:?}"))?;
       }
     }
+  }
+}
+
+#[cfg(test)]
+mod evaluation_tests {
+  use super::*;
+
+  #[test]
+  fn wrapper_limits_kernel_work_and_encodes_png() {
+    let wrapper = evaluation_wrapper("Plot[Sin[x], {x, 0, 1}]", std::time::Duration::from_secs(7));
+    assert!(wrapper.contains("TimeConstrained[Check[(Plot[Sin[x], {x, 0, 1}]), $Failed], 7"));
+    assert!(wrapper.contains("BaseEncode[ExportByteArray[g, \"PNG\"]]"));
+    assert!(wrapper.contains("\"timed_out\" -> timedOut"));
+  }
+
+  #[test]
+  fn response_parses_output_logs_and_image() {
+    let r = parse_evaluation_response(
+      r#"{"output":"42","graphics":"iVBORw0KGgo=","timed_out":false}"#,
+      vec!["hello".into()]
+    ).unwrap();
+    assert_eq!(r.output, "42");
+    assert_eq!(r.logs, vec!["hello"]);
+    assert_eq!(r.graphics.as_deref(), Some("iVBORw0KGgo="));
+  }
+
+  #[test]
+  fn response_rejects_timeouts_and_malformed_data() {
+    assert!(parse_evaluation_response(
+      r#"{"output":"$Aborted","graphics":null,"timed_out":true}"#, vec![]
+    ).is_err());
+    assert!(parse_evaluation_response(r#"{"graphics":null}"#, vec![]).is_err());
+    assert!(parse_evaluation_response("not JSON", vec![]).is_err());
   }
 }
 
