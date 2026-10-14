@@ -61,7 +61,10 @@ def attempt(label: str, expression: str, seconds: int, environment: dict[str, st
     try:
         output, _ = process.communicate(timeout=seconds)
     except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         output, _ = process.communicate()
         print(output[-4000:], flush=True)
         print(f"TIMEOUT: {label} ({seconds}s); process group killed", flush=True)
@@ -100,8 +103,20 @@ def main() -> int:
         print(f"{outcome}: {label}", flush=True)
 
     print("This probes Wolfram standalone rendering, not MCP/WSTP.", flush=True)
-    if all(outcome == "PASS" for _, outcome in results):
+    states = dict(results)
+    basic_ok = (
+        states.get("kernel arithmetic") == "PASS"
+        and states.get("symbolic Plot (no rasterizer)") == "PASS"
+    )
+    png_ok = any(
+        outcome == "PASS"
+        for label, outcome in results
+        if label.startswith("direct PNG export")
+    )
+    if basic_ok and png_ok:
+        print("PASS: at least one standalone graphics export method works", flush=True)
         return 0
+    print("FAIL: no working standalone graphics export method found", flush=True)
     return 1
 
 
