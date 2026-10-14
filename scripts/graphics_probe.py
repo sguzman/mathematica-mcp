@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from install_image_metadata_tools import paclet_is_installed
+
 KERNEL = shutil.which("WolframKernel") or shutil.which("MathKernel")
 
 CASES = [
@@ -89,6 +91,18 @@ def main() -> int:
     if KERNEL is None:
         print("ERROR: WolframKernel and MathKernel are absent from PATH", flush=True)
         return 2
+
+    print("Checking required Wolfram image metadata paclet (no network access)...", flush=True)
+    try:
+        installed = paclet_is_installed(KERNEL)
+    except Exception as exc:
+        print(f"ERROR: ImageMetadataTools check failed: {exc}", flush=True)
+        return 2
+    if not installed:
+        print("BLOCKED: ImageMetadataTools is absent; Wolfram 15 would auto-download it during PNG export.", flush=True)
+        print("Install explicitly once: python3 -u scripts/install_image_metadata_tools.py --install", flush=True)
+        print("Skipping PNG probes to avoid repeated implicit GitHub downloads.", flush=True)
+        return 3
 
     results: list[tuple[str, str]] = []
     for label, expression, timeout, environment in CASES:
