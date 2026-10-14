@@ -1,0 +1,14 @@
+# Standalone Rust project used to verify actual library dependency consumption.
+# [workspace] makes this an independent Cargo resolution root.
+[package]
+name = "mathematica-library-consumer"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+mathematica-mcp = { path = "../.." }
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread"] }
