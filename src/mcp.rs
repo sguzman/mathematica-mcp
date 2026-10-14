@@ -19,21 +19,21 @@ use serde::{
   Serialize
 };
 
-use crate::session::SessionManager;
+use crate::Mathematica;
 use crate::wolfram;
 
 #[derive(Clone)]
 pub struct MathematicaServer {
-  sessions:    SessionManager,
+  sessions:    Mathematica,
   tool_router: ToolRouter<Self>
 }
 
 impl MathematicaServer {
-  pub fn new() -> Self {
-    Self {
-      sessions:    SessionManager::new(),
+  pub fn new() -> anyhow::Result<Self> {
+    Ok(Self {
+      sessions:    Mathematica::new()?,
       tool_router: Self::tool_router()
-    }
+    })
   }
 }
 
@@ -62,15 +62,11 @@ impl MathematicaServer {
     &self,
     Parameters(params): Parameters<ExecuteParams>
   ) -> Result<Json<ExecuteResult>, String> {
-    if !self.sessions.verify(&params.session_id) {
-      return Err("Invalid session ID (malformed or tampered).".to_string());
-    }
-
     let timeout = std::time::Duration::from_secs(params.timeout_seconds.unwrap_or(60));
     let started = std::time::Instant::now();
     let res = self
       .sessions
-      .eval(&params.session_id, &params.code, timeout)
+      .execute(&params.session_id, &params.code, timeout)
       .await
       .map_err(|e| e.to_string())?;
 
@@ -90,9 +86,6 @@ impl MathematicaServer {
     &self,
     Parameters(params): Parameters<CloseSessionParams>
   ) -> Result<Json<CloseSessionResult>, String> {
-    if !self.sessions.verify(&params.session_id) {
-      return Err("Invalid session ID.".to_string());
-    }
     self.sessions.close_session(&params.session_id).await.map_err(|e| e.to_string())?;
     Ok(Json(CloseSessionResult {
       closed:     true,
@@ -133,10 +126,6 @@ impl MathematicaServer {
     &self,
     Parameters(params): Parameters<FinanceParams>
   ) -> Result<Json<FinanceResult>, String> {
-    if !self.sessions.verify(&params.session_id) {
-      return Err("Invalid session ID.".to_string());
-    }
-
     let code = wolfram::build_financial_data_code(
       &params.symbol,
       params.property.as_deref(),
@@ -149,7 +138,7 @@ impl MathematicaServer {
     let timeout = std::time::Duration::from_secs(params.timeout_seconds.unwrap_or(60));
     let started = std::time::Instant::now();
     let res =
-      self.sessions.eval(&params.session_id, &code, timeout).await.map_err(|e| e.to_string())?;
+      self.sessions.execute(&params.session_id, &code, timeout).await.map_err(|e| e.to_string())?;
 
     Ok(Json(FinanceResult {
       wolfram_code: code,
@@ -239,7 +228,7 @@ pub struct FinanceResult {
 }
 
 pub async fn run_server() -> anyhow::Result<()> {
-  let server = MathematicaServer::new();
+  let server = MathematicaServer::new()?;
 
   // Serve over stdio.
   let transport = stdio();
