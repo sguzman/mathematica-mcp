@@ -24,7 +24,7 @@ Each session has its own worker thread and kernel. Evaluations return InputForm 
 - Rust toolchain and Cargo (see rust-toolchain.toml).
 - A locally installed and licensed Mathematica / Wolfram Language kernel.
 - A matching native WSTP development library, discoverable by the patched WSTP build script.
-- Linux or Windows (both require their own native integration test).
+- Linux is the only release target for this QA cycle. Legacy Windows support remains in source but is not part of the acceptance gate.
 
 Wolfram licensing and WSTP redistribution obligations are separate from this project's MIT license.
 
@@ -83,11 +83,16 @@ Unit tests cover signed identifiers, configuration selection, evaluation-wrapper
 cargo test --locked
 ~~~
 
-Run the real-kernel protocol smoke test on a machine with a working Mathematica/WSTP installation:
+Run the complete Linux validation entrypoint (native compile, tests, Clippy, then live MCP protocol smoke) from a Linux machine with working Mathematica/WSTP:
 
 ~~~sh
-cargo build --locked
-python3 scripts/mcp_smoke.py
+fish scripts/linux_qa.fish
+~~~
+
+For the kernel-independent MCP test-client tests, use:
+
+~~~sh
+python3 -m unittest discover -s scripts -p 'test_*.py'
 ~~~
 
 The smoke test checks MCP initialization, tool enumeration, Wolfram arithmetic, Base64 PNG output, timeout/error behavior, session recovery, and shutdown. It uses only Python's standard library.
@@ -110,6 +115,6 @@ On GitHub-hosted CI without Wolfram native libraries, compile-time typechecking 
 
 ## Release state
 
-The crate is currently **0.1.0**. Do not tag it as stable until a successful native Linux build, unit tests, MCP smoke test, and platform-specific acceptance checks. Windows requires separate native verification. See docs/reference/RELEASE.md for release gates.
+The crate is currently **0.1.0**. Do not tag it as stable until a successful native Linux build, unit tests, MCP smoke test, and platform-specific acceptance checks. Windows is preserved as legacy code but is not a release gate here. See docs/reference/RELEASE.md for release gates.
 
 License: MIT for this project's code; Wolfram and WSTP retain their separate licenses.
