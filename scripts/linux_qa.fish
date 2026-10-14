@@ -15,7 +15,7 @@ if test (uname -s) != Linux
     exit 2
 end
 
-for exe in cargo python3
+for exe in cargo rustc python3
     if not command -sq $exe
         echo "ERROR: required executable not found: $exe" >&2
         exit 2
@@ -35,6 +35,10 @@ else if command -sq MathKernel
 else
     echo "NOTE: no kernel on PATH; native Wolfram discovery may still find it."
 end
+
+echo "Rust compiler: "(rustc --version)
+echo "Cargo: "(cargo --version)
+echo "Using the current system Rust toolchain (no repo-pinned nightly)."
 
 echo "=== Native WSTP build ==="
 cargo build --locked
