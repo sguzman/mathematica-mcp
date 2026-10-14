@@ -1,15 +1,4 @@
-mod config;
-mod mcp;
-mod platform;
-mod repl;
-mod session;
-mod session_id;
-mod wolfram;
-
-use clap::{
-  Parser,
-  Subcommand
-};
+use clap::{Parser, Subcommand};
 use std::io::IsTerminal;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -24,21 +13,14 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-  /// Run the MCP server over stdio (for
-  /// Continue/Claude Desktop/etc.)
+  /// Run the MCP server over stdio.
   Serve,
-  /// Interactive REPL that calls the
-  /// same tools locally (no MCP host
-  /// needed)
+  /// Interactive REPL, sharing the library's session engine.
   Repl
 }
 
 fn init_tracing() {
-  // IMPORTANT: server mode must not
-  // write to stdout (stdio transport
-  // uses stdout for protocol).
-  // tracing-subscriber defaults to
-  // stderr; we keep it that way.
+  // Never log to stdout: MCP owns stdout for JSON-RPC frames.
   let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
   tracing_subscriber::fmt()
     .with_env_filter(filter)
@@ -51,24 +33,21 @@ fn init_tracing() {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
   init_tracing();
-
   let cli = Cli::parse();
   let cmd = match cli.cmd {
     | Some(cmd) => cmd,
     | None if std::io::stdin().is_terminal() => Command::Repl,
     | None => Command::Serve
   };
-
   match cmd {
     | Command::Serve => {
       info!("starting MCP server (stdio)");
-      mcp::run_server().await?;
+      mathematica_mcp::serve_stdio().await?
     }
     | Command::Repl => {
       info!("starting local REPL");
-      repl::run_repl().await?;
+      mathematica_mcp::run_repl().await?
     }
   }
-
   Ok(())
 }
