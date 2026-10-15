@@ -17,6 +17,44 @@ import sys
 import tempfile
 import time
 
+def read_sse_jsonrpc(response: http.client.HTTPResponse, request_id: object) -> dict:
+    """Read a matching JSON-RPC response from an SSE stream.
+
+    SSE priming/retry events and keep-alives can contain no JSON payload.
+    Accumulate data lines until the blank line terminating an SSE event,
+    ignoring control events, notifications, and unrelated request IDs.
+    """
+    data_lines: list[bytes] = []
+    while True:
+        line = response.readline()
+        if not line:
+            raise RuntimeError("SSE stream ended without JSON-RPC response")
+        line = line.rstrip(b"\r\n")
+        if line:
+            if line.startswith(b":"):
+                continue  # SSE comment/keep-alive
+            field, sep, value = line.partition(b":")
+            if field == b"data" and sep:
+                # SSE removes at most one leading ASCII space after the colon.
+                if value.startswith(b" "):
+                    value = value[1:]
+                data_lines.append(value)
+            continue
+
+        if not data_lines:
+            continue  # SSE control-only event (id, retry, comment, etc.)
+        raw = b"\n".join(data_lines)
+        data_lines.clear()
+        if not raw.strip():
+            continue  # Valid empty SSE priming event; no JSON to decode.
+        try:
+            message = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"invalid JSON-RPC SSE event: {raw[:160]!r}") from exc
+        if isinstance(message, dict) and message.get("id") == request_id:
+            return message
+
+
 
 class HttpMcpClient:
     def __init__(self, host: str, port: int) -> None:
@@ -58,17 +96,7 @@ class HttpMcpClient:
                 return json.loads(response.read())
             if "text/event-stream" not in mime:
                 raise RuntimeError(f"unexpected response Content-Type: {mime}")
-            # The rmcp 0.14 transport may prepend SSE retry/priming events.
-            # Read until the JSON-RPC response matching this request ID.
-            while True:
-                line = response.readline()
-                if not line:
-                    raise RuntimeError("SSE stream ended without JSON-RPC response")
-                if not line.startswith(b"data:"):
-                    continue
-                message = json.loads(line[5:].strip())
-                if message.get("id") == payload.get("id"):
-                    return message
+            return read_sse_jsonrpc(response, payload.get("id"))
         finally:
             connection.close()
 
