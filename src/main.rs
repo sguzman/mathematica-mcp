@@ -15,6 +15,8 @@ struct Cli {
 enum Command {
   /// Run the MCP server over stdio.
   Serve,
+  /// Run a persistent Streamable HTTP server for LAN MCP clients.
+  ServeHttp,
   /// Interactive REPL, sharing the library's session engine.
   Repl
 }
@@ -43,6 +45,10 @@ async fn main() -> anyhow::Result<()> {
     | Command::Serve => {
       info!("starting MCP server (stdio)");
       mathematica_mcp::serve_stdio().await?
+    }
+    | Command::ServeHttp => {
+      info!("starting MCP server (Streamable HTTP)");
+      mathematica_mcp::serve_http().await?
     }
     | Command::Repl => {
       info!("starting local REPL");

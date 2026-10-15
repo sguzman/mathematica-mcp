@@ -16,7 +16,7 @@ use chrono::{
 use flume::Sender;
 use schemars::JsonSchema;
 use serde::Serialize;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 
 use crate::session_id::SessionIdSigner;
 use crate::wolfram::{
@@ -60,7 +60,8 @@ pub struct SessionHandle {
 #[derive(Clone)]
 pub struct SessionManager {
   signer: SessionIdSigner,
-  inner:  Arc<Mutex<HashMap<String, SessionHandle>>>
+  inner:  Arc<Mutex<HashMap<String, SessionHandle>>>,
+  kernel_slots: Option<Arc<Semaphore>>
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -72,11 +73,16 @@ pub struct SessionInfo {
 
 impl SessionManager {
   pub fn new() -> Self {
+    Self::new_with_limit(None)
+  }
+
+  pub fn new_with_limit(max_kernels: Option<usize>) -> Self {
     let signer = SessionIdSigner::new();
     let inner = Arc::new(Mutex::new(HashMap::new()));
     let manager = Self {
       signer,
-      inner
+      inner,
+      kernel_slots: max_kernels.map(|max| Arc::new(Semaphore::new(max)))
     };
 
     // Background task for idle cleanup
@@ -135,6 +141,12 @@ impl SessionManager {
   }
 
   pub async fn create_session(&self) -> anyhow::Result<String> {
+    let kernel_slot = if let Some(slots) = &self.kernel_slots {
+      Some(slots.clone().try_acquire_owned()
+        .map_err(|_| anyhow!("kernel limit reached; close or wait for an idle session"))?)
+    } else {
+      None
+    };
     let session_id = self.signer.generate();
     let kernel_cmd = wolfram::resolve_kernel_cmd()?;
 
@@ -142,6 +154,9 @@ impl SessionManager {
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<anyhow::Result<()>>();
 
     let join = thread::spawn(move || {
+      // The slot is released only after this worker actually terminates,
+      // including after a failed startup or an unresponsive native call.
+      let _kernel_slot = kernel_slot;
       let mut kernel = match wolfram::launch_link(&kernel_cmd) {
         | Ok(k) => {
           let _ = ready_tx.send(Ok(()));

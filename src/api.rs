@@ -59,10 +59,19 @@ impl Mathematica {
   /// runtime context. This does not start a Wolfram kernel until
   /// `create_session` is called.
   pub fn new() -> anyhow::Result<Self> {
+    Self::with_kernel_limit(None)
+  }
+
+  /// Create a shared kernel manager with an optional process-wide kernel cap.
+  /// The cap applies across all clones and HTTP MCP tenants of this handle.
+  pub fn with_kernel_limit(max_kernels: Option<usize>) -> anyhow::Result<Self> {
     tokio::runtime::Handle::try_current()
       .context("Mathematica::new requires an active Tokio runtime")?;
+    if max_kernels == Some(0) {
+      anyhow::bail!("max_kernels must be greater than zero");
+    }
     Ok(Self {
-      sessions: SessionManager::new()
+      sessions: SessionManager::new_with_limit(max_kernels)
     })
   }
 

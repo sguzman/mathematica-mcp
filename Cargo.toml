@@ -19,6 +19,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"
+axum = "0.8"
 chrono = { features = [
   "clock",
 ], version = "0.4" }
@@ -32,6 +33,7 @@ rmcp = { features = [
   "macros",
   "server",
   "transport-io",
+  "transport-streamable-http-server",
 ], version = "0.14" }
 schemars = { features = [
   "derive",
@@ -45,6 +47,8 @@ toml = "0.9"
 tokio = { features = [
   "macros",
   "rt-multi-thread",
+  "net",
+  "signal",
   "sync",
   "time",
 ], version = "1.49" }

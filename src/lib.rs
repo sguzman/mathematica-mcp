@@ -43,6 +43,11 @@ pub async fn serve_stdio() -> anyhow::Result<()> {
   mcp::run_server().await
 }
 
+/// Run the multi-tenant Streamable HTTP MCP service as a persistent daemon.
+pub async fn serve_http() -> anyhow::Result<()> {
+  mcp::run_http().await
+}
+
 /// Run the interactive Mathematica REPL using the same engine.
 pub async fn run_repl() -> anyhow::Result<()> {
   repl::run_repl().await

@@ -10,7 +10,39 @@ const CONFIG_PATH_ENV_VAR: &str = "MATHEMATICA_MCP_CONFIG";
 #[derive(Debug, Default, Deserialize, Clone)]
 pub struct RuntimeConfig {
   #[serde(default)]
-  pub kernel: KernelConfig
+  pub kernel: KernelConfig,
+  #[serde(default)]
+  pub server: ServerConfig,
+  #[serde(default)]
+  pub tenancy: TenancyConfig
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(default)]
+pub struct ServerConfig {
+  pub listen: String,
+  pub endpoint: String
+}
+
+impl Default for ServerConfig {
+  fn default() -> Self {
+    Self {
+      listen: "127.0.0.1:8765".into(),
+      endpoint: "/mcp".into()
+    }
+  }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(default)]
+pub struct TenancyConfig {
+  pub max_kernels: usize
+}
+
+impl Default for TenancyConfig {
+  fn default() -> Self {
+    Self { max_kernels: 4 }
+  }
 }
 
 #[derive(Debug, Default, Deserialize, Clone)]
@@ -78,6 +110,14 @@ mod tests {
   };
 
   #[test]
+  fn default_http_settings_are_valid() {
+    let cfg: RuntimeConfig = toml::from_str("[server]\nlisten = \"0.0.0.0:8765\"\n[tenancy]\nmax_kernels = 8").unwrap();
+    assert_eq!(cfg.server.listen, "0.0.0.0:8765");
+    assert_eq!(cfg.server.endpoint, "/mcp");
+    assert_eq!(cfg.tenancy.max_kernels, 8);
+  }
+
+  #[test]
   #[cfg(target_os = "windows")]
   fn selects_windows_path() {
     let config = RuntimeConfig {
@@ -88,7 +128,8 @@ mod tests {
         windows_path: Some(
           "C:\\Program Files\\Wolfram Research\\Wolfram\\14.3\\WolframKernel.exe".into()
         )
-      }
+      },
+      ..Default::default()
     };
 
     assert_eq!(
@@ -108,7 +149,8 @@ mod tests {
         windows_path: Some(
           "C:\\Program Files\\Wolfram Research\\Wolfram\\14.3\\WolframKernel.exe".into()
         )
-      }
+      },
+      ..Default::default()
     };
 
     assert_eq!(
