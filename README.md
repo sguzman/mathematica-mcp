@@ -13,6 +13,17 @@ the total number of kernels across agents. Agents cannot list, execute, or close
 each other's kernel sessions. Existing stdio and embedded Rust entrypoints remain
 supported.
 
+On your EndeavourOS machine, the native-test-first **one-command installer**
+is:
+
+```sh
+python3 scripts/deploy_user_service.py
+```
+
+It preserves your existing external TOML config and enables/restarts the
+systemd user service only after native acceptance passes. For manual
+deployment instead:
+
 ```sh
 cargo build --locked --release
 install -Dm755 target/release/mathematica-mcp ~/.local/bin/mathematica-mcp

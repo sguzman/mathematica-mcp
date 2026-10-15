@@ -9,6 +9,29 @@ state are isolated by MCP client/transport session.
 Use the licensed Wolfram 15 installation and native WSTP SDK already available
 to the normal user. Run the native QA before deploying a new binary.
 
+### Automatic native verification and deployment (recommended)
+
+From an up-to-date checkout, run as the desktop user:
+
+```sh
+python3 scripts/deploy_user_service.py
+```
+
+The script first runs `fish scripts/linux_qa.fish`, including the native
+two-agent HTTP isolation test; then builds a release binary and installs it
+atomically, creates the external LAN TOML **only if missing**, installs the
+systemd user unit (backing up a customized unit), enables/restarts it, and
+probes `/healthz`. A test failure aborts before any installation. It does not
+modify an existing personal TOML, change the system firewall or enable
+systemd lingering. Run the script after future updates to redeploy safely.
+
+If the machine has no persistent login and must keep running after logout,
+configure systemd lingering separately. The script reports whether it is
+disabled. A successful health probe proves the daemon is responding locally;
+check connectivity from a second machine to verify LAN routing and firewall.
+
+### Manual deployment (alternative)
+
 ```sh
 cargo build --locked --release
 install -Dm755 target/release/mathematica-mcp ~/.local/bin/mathematica-mcp

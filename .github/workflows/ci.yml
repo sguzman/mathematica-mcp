@@ -40,7 +40,7 @@ jobs:
       - name: Test MCP smoke client independently
         run: python3 -m unittest discover -s scripts -p "test_*.py"
       - name: Parse-check bounded Linux graphics probe
-        run: python3 -m py_compile scripts/graphics_probe.py scripts/install_image_metadata_tools.py scripts/http_smoke.py
+        run: python3 -m py_compile scripts/graphics_probe.py scripts/install_image_metadata_tools.py scripts/http_smoke.py scripts/deploy_user_service.py
       - name: Syntax-check Linux Fish QA runner
         run: |
           sudo apt-get update -qq
