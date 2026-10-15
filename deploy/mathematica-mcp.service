@@ -1,0 +1,17 @@
+[Unit]
+Description=Mathematica MCP shared Streamable HTTP service
+Documentation=https://github.com/sguzman/mathematica-mcp/blob/main/docs/reference/DAEMON.md
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/mathematica-mcp serve-http
+Environment=MATHEMATICA_MCP_CONFIG=%h/.config/mathematica-mcp/config.toml
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+# Wolfram code deliberately runs with the invoking user's privileges.
+# Do not switch to a system service running as root.
+
+[Install]
+WantedBy=default.target

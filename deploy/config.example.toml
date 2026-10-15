@@ -1,0 +1,13 @@
+# Copy to ~/.config/mathematica-mcp/config.toml
+# Bind all local interfaces: use a specific assigned LAN IP to restrict which
+# network interface receives requests. See docs/reference/DAEMON.md.
+[server]
+listen = "0.0.0.0:8765"
+endpoint = "/mcp"
+
+[tenancy]
+# Max concurrently alive Wolfram kernel worker threads, across all agents.
+max_kernels = 4
+
+[kernel]
+# linux_path = "/usr/local/Wolfram/Wolfram/15.0/Executables/WolframKernel"

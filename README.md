@@ -1,8 +1,47 @@
 # Mathematica MCP
 
-A local, Rust-based Model Context Protocol (MCP) server for Wolfram Language and Mathematica. It launches real kernels over **WSTP** and exposes computation through **stdio**. It does not send computation to a cloud service.
+A Rust-based Model Context Protocol (MCP) server for Wolfram Language and Mathematica. It launches real kernels over **WSTP**, exposes computation through **stdio** or a **persistent multi-tenant Streamable HTTP daemon**, and does not send computation to a cloud service.
 
 **Status:** v0.1.0 in development. **Native Linux acceptance smoke verified on 2026-10-14:** EndeavourOS with Rust 1.99.0 and Wolfram 15.0 successfully completed native WSTP build, all 10 Rust unit tests, strict Clippy, and the real-kernel MCP smoke suite (including PNG graphics, kernel-side timeout/recovery and clean shutdown). This is an observed single-machine acceptance run, not a stability certification for every platform or failure mode.
+
+## Shared systemd daemon (LAN)
+
+The `serve-http` command listens on a configurable local/LAN address. **One
+systemd process serves all MCP clients**; every MCP client receives an independent
+handler and may create its own Wolfram kernel sessions. The shared manager limits
+the total number of kernels across agents. Agents cannot list, execute, or close
+each other's kernel sessions. Existing stdio and embedded Rust entrypoints remain
+supported.
+
+```sh
+cargo build --locked --release
+install -Dm755 target/release/mathematica-mcp ~/.local/bin/mathematica-mcp
+install -Dm644 deploy/mathematica-mcp.service ~/.config/systemd/user/mathematica-mcp.service
+mkdir -p ~/.config/mathematica-mcp
+cp deploy/config.example.toml ~/.config/mathematica-mcp/config.toml
+# Edit [server].listen to an IP address on this machine (or 0.0.0.0).
+systemctl --user daemon-reload
+systemctl --user enable --now mathematica-mcp.service
+```
+
+Remote agents point their Streamable HTTP MCP client to
+`http://HOST_LAN_IP:8765/mcp`. The service's health endpoint is
+`http://HOST_LAN_IP:8765/healthz`. The daemon binds only to the configured
+`[server].listen` address. `[tenancy].max_kernels` bounds the number of
+*running or still-blocked* worker threads; idle kernel sessions expire after
+30 minutes. HTTP MCP sessions are managed separately from Wolfram kernel
+sessions: use `mathematica_create_session` before evaluating. Restarting the
+daemon invalidates old MCP/Wolfram sessions.
+
+**Danger:** Arbitrary Wolfram Language can execute OS commands under the
+systemd service account. Exposing the service without authentication to a LAN
+gives anyone who can reach that port arbitrary code execution as that account.
+Only bind on networks and hosts you fully trust; restrict network access if
+other people/devices share the LAN. This deployment deliberately does **not**
+implement user authentication or TLS.
+
+See [daemon configuration, host setup, systemd commands, and troubleshooting](docs/reference/DAEMON.md).
+A real-Wolfram HTTP tenant-isolation test is included in `scripts/http_smoke.py`.
 
 ## Embed in other Rust projects
 
@@ -173,6 +212,9 @@ On GitHub-hosted CI without Wolfram native libraries, compile-time typechecking 
 
 ## Release state
 
-The crate is currently **0.1.0**. The initial Linux native build, unit-test, lint, and real-kernel smoke gates passed on 2026-10-14 (Jobflick run 89582e89-ed7a-4121-94b8-5c1ce9bcce81, revision 8728455); stdout JSON-RPC isolation, exceptional native process cleanup and missing-config edge cases still require dedicated acceptance checks before declaring a fully certified release. Windows is preserved as legacy code but is not a release gate here. See docs/reference/RELEASE.md for remaining gates.
+The crate is currently **0.1.0**. The new Streamable HTTP/systemd
+deployment has source-level acceptance checks; its real-kernel, concurrent LAN
+acceptance must be rerun on the target machine before treating it as deployed.
+The older native smoke result below predates the HTTP additions. The initial Linux native build, unit-test, lint, and real-kernel smoke gates passed on 2026-10-14 (Jobflick run 89582e89-ed7a-4121-94b8-5c1ce9bcce81, revision 8728455); stdout JSON-RPC isolation, exceptional native process cleanup and missing-config edge cases still require dedicated acceptance checks before declaring a fully certified release. Windows is preserved as legacy code but is not a release gate here. See docs/reference/RELEASE.md for remaining gates.
 
 License: MIT for this project's code; Wolfram and WSTP retain their separate licenses.

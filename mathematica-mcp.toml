@@ -1,5 +1,15 @@
+# This repository config is optional and portable; for systemd use
+# MATHEMATICA_MCP_CONFIG=~/.config/mathematica-mcp/config.toml.
+# See deploy/config.example.toml for a LAN configuration.
+[server]
+listen = "127.0.0.1:8765"
+endpoint = "/mcp"
+
+[tenancy]
+max_kernels = 4
+
 # Optional per-machine Wolfram kernel paths.
 # Leave unset to discover Wolfram automatically. Do not commit personal paths.
 [kernel]
-# linux_path = "/opt/Wolfram/Wolfram/14.3/Executables/WolframKernel"
-# windows_path = 'C:\Program Files\Wolfram Research\Wolfram\14.3\WolframKernel.exe'
+# linux_path = "/opt/Wolfram/Wolfram/15.0/Executables/WolframKernel"
+# windows_path = 'C:\Program Files\Wolfram Research\Wolfram\15.0\WolframKernel.exe'
