@@ -2,7 +2,7 @@
 
 A Rust-based Model Context Protocol (MCP) server for Wolfram Language and Mathematica. It launches real kernels over **WSTP**, exposes computation through **stdio** or a **persistent multi-tenant Streamable HTTP daemon**, and does not send computation to a cloud service.
 
-**Status:** v0.1.0 in development. **Native Linux acceptance smoke verified on 2026-10-14:** EndeavourOS with Rust 1.99.0 and Wolfram 15.0 successfully completed native WSTP build, all 10 Rust unit tests, strict Clippy, and the real-kernel MCP smoke suite (including PNG graphics, kernel-side timeout/recovery and clean shutdown). This is an observed single-machine acceptance run, not a stability certification for every platform or failure mode.
+**Status: v1.0.0 — stable Linux MVP (2026-10-15).** Native acceptance on EndeavourOS (Rust 1.99.0, Wolfram 15.0) passed the WSTP build, 12 unit tests, strict Clippy, real-kernel stdio and HTTP MCP smoke, independent downstream Rust library consumer, and two simultaneous isolated HTTP agents. The systemd user service was installed, enabled, and verified active with a successful local HTTP health probe. See [v1.0.0 release notes](docs/releases/v1.0.0.md), [changelog](CHANGELOG.md), and [release policy](docs/reference/RELEASE.md).
 
 ## Shared systemd daemon (LAN)
 
@@ -223,9 +223,17 @@ On GitHub-hosted CI without Wolfram native libraries, compile-time typechecking 
 
 ## Release state
 
-The crate is currently **0.1.0**. The new Streamable HTTP/systemd
-deployment has source-level acceptance checks; its real-kernel, concurrent LAN
-acceptance must be rerun on the target machine before treating it as deployed.
-The older native smoke result below predates the HTTP additions. The initial Linux native build, unit-test, lint, and real-kernel smoke gates passed on 2026-10-14 (Jobflick run 89582e89-ed7a-4121-94b8-5c1ce9bcce81, revision 8728455); stdout JSON-RPC isolation, exceptional native process cleanup and missing-config edge cases still require dedicated acceptance checks before declaring a fully certified release. Windows is preserved as legacy code but is not a release gate here. See docs/reference/RELEASE.md for remaining gates.
+**v1.0.0 — Linux MVP.** Native Wolfram 15 acceptance was successful on
+2026-10-15, including independent Rust consumer and multi-client HTTP tests.
+The systemd user service was installed and verified active. The stable
+contract covers the documented Linux API, stdio/HTTP MCP tools, and TOML
+configuration; compatibility-breaking changes will require a new major
+version. This release is source-only and does not ship Wolfram/WSTP binaries.
+
+Known non-blocking limitations: access from a second LAN machine was not
+tested; a permanently stuck native WSTP operation cannot be guaranteed
+to terminate its OS process; Windows has not been certified; and
+unauthenticated HTTP must remain on a trusted network. These limitations
+are tracked as post-1.0 work, not represented as validated behavior.
 
 License: MIT for this project's code; Wolfram and WSTP retain their separate licenses.

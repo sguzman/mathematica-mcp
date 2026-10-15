@@ -7,12 +7,14 @@ The Rust successor is this repository, sguzman/mathematica-mcp.
 
 ## Essential modules
 
-- src/mcp.rs: typed MCP tools with rmcp and stdio transport
+- src/mcp.rs: typed MCP tools with rmcp, stdio and shared Streamable HTTP transport
 - src/session.rs: stateful per-session WSTP worker and cleanup management
 - src/session_id.rs: ephemeral HMAC-signed readable IDs
 - src/wolfram.rs: kernel discovery, evaluation, JSON and graphics wrappers
-- src/config.rs and src/platform/: kernel path discovery
+- src/config.rs and src/platform/: kernel and HTTP/TOML configuration
 - src/repl.rs: interactive development shell
+- deploy/: user systemd unit and portable TOML example
+- scripts/http_smoke.py: two-agent real-kernel HTTP acceptance
 - wstp-sys-patched/: patched WSTP FFI build boundary
 
 Python parity and runtime interoperability should be demonstrated with real-kernel tests, not inferred from equivalent-looking function names. See scripts/mcp_smoke.py for the current regression scenarios.

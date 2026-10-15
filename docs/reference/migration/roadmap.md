@@ -1,24 +1,28 @@
-# Mathematica MCP stabilization roadmap
+# Mathematica MCP stabilization history
 
-The Rust server is implemented but not yet certified as a stable release.
+**Completed — stable v1.0.0 Linux MVP (2026-10-15).**
+This is the completed migration record, not an outstanding release gate.
 
-## Implemented in the October 2026 maintenance pass
+## Completed milestones
 
-- Replace format-only session IDs with ephemeral signed IDs.
-- Apply TimeConstrained inside Wolfram and bound Rust watchdog waits.
-- Retire unresponsive sessions, bound worker queues and avoid idle reaping of active calls.
-- Encode PNG graphics with BaseEncode and test JSON response parsing.
-- Remove stale absolute kernel override paths; diagnose missing explicit config.
-- Add a real-kernel stdio MCP protocol smoke test and kernel-independent source checks.
-- Replace outdated documentation and maintenance templates.
+- Replaced format-only session IDs with ephemeral signed IDs.
+- Added Wolfram `TimeConstrained`, watchdogs, idle cleanup, and
+  rejection of concurrent evaluations on one kernel.
+- Verified Base64 PNG graphics, finance-data helper, and error responses.
+- Removed obsolete hard-coded Wolfram kernel paths.
+- Implemented real-kernel stdio MCP acceptance and strict CI source checks.
+- Exported a native Rust library and ran the independent consumer.
+- Implemented centralized multi-client Streamable HTTP MCP with per-agent
+  Wolfram kernel session ownership, shared kernel cap and TOML config.
+- Installed and verified an enabled systemd user service on EndeavourOS.
+- Passed native WSTP, two-agent HTTP, Rust library, stdio and timeout tests.
+- Released stable Linux v1.0.0 (source-only).
 
-## Remaining release gates
+## Post-release improvements (non-blocking)
 
-- Obtain a clean native WSTP build on Linux and pass cargo test.
-- Run scripts/mcp_smoke.py against a licensed local kernel, review logs, and fix any failures.
-- Verify no orphaned child processes during a stuck native WSTP call. Current library exposes no direct kill method.
-- Verify Python-to-Rust behavior parity where it matters for existing consumers.
-- Windows verification is deferred and is not required to finish this Linux-focused maintenance cycle.
-- Tag only after the acceptance matrix is recorded in the release notes.
+- Investigate stuck WSTP native call and child-process cleanup (issue #1).
+- Test access from a different LAN machine (issue #2).
+- Extra stdout/config and SIGTERM exceptional-path checks (issues #1/#2).
+- Windows verification deferred; not part of Linux v1.0.0.
 
-Until these checks pass, this repository remains a **development** release at v0.1.0.
+See [release policy](../RELEASE.md) for support and limitations.

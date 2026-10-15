@@ -47,5 +47,49 @@ jobs:
           sudo apt-get install -y -qq fish
           fish -n scripts/linux_qa.fish
 
-# Native WSTP linking and real Wolfram kernel tests are deliberately not claimed
-# by this job. Run scripts/mcp_smoke.py on a properly configured local machine.
+# Hosted CI cannot link to the user's licensed Wolfram runtime. Native
+# WSTP acceptance evidence for v1.0.0 is in docs/reference/RELEASE.md.
+
+  publish_v1:
+    name: Publish annotated v1.0.0 release
+    needs: typecheck
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'release: v1.0.0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify v1.0.0 manifest and release notes
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import tomllib
+          package = tomllib.loads(pathlib.Path('Cargo.toml').read_text())['package']
+          lock = tomllib.loads(pathlib.Path('Cargo.lock').read_text())
+          assert package['version'] == '1.0.0'
+          assert [p['version'] for p in lock['package'] if p['name'] == 'mathematica-mcp'] == ['1.0.0']
+          assert pathlib.Path('docs/releases/v1.0.0.md').is_file()
+          PY
+      - name: Annotated Git tag and GitHub source release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --tags origin refs/tags/v1.0.0 >/dev/null 2>&1; then
+            echo "Tag v1.0.0 already exists; refusing to move it"
+            git fetch origin tag v1.0.0
+            test "$(git rev-list -n 1 v1.0.0)" = "$GITHUB_SHA"
+          else
+            git tag -a v1.0.0 -m "Mathematica MCP v1.0.0 - Linux MVP"
+            git push origin refs/tags/v1.0.0
+          fi
+          if gh release view v1.0.0 >/dev/null 2>&1; then
+            echo "GitHub release v1.0.0 already exists"
+          else
+            gh release create v1.0.0 --verify-tag \
+              --title "Mathematica MCP v1.0.0 - Linux MVP" \
+              --notes-file docs/releases/v1.0.0.md --latest
+          fi
