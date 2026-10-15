@@ -140,6 +140,7 @@ def run(executable: str) -> None:
         first = HttpMcpClient("127.0.0.1", port)
         second = HttpMcpClient("127.0.0.1", port)
         wolfram_id: str | None = None
+        second_id: str | None = None
         try:
             wait_for_health(proc, port)
             print("PASS: HTTP daemon serves health endpoint", flush=True)
@@ -158,11 +159,33 @@ def run(executable: str) -> None:
             assert output["output"] == "42", output
             print("PASS: HTTP tool dispatch to real Wolfram kernel", flush=True)
 
+            second_id = second.tool("mathematica_create_session")["session_id"]
+            assert second_id != wolfram_id
+            first.tool("mathematica_execute_code",
+                       session_id=wolfram_id, code="tenantValue = 41")
+            second.tool("mathematica_execute_code",
+                        session_id=second_id, code="tenantValue = 99")
+            assert first.tool("mathematica_execute_code",
+                              session_id=wolfram_id, code="tenantValue")["output"] == "41"
+            assert second.tool("mathematica_execute_code",
+                               session_id=second_id, code="tenantValue")["output"] == "99"
+            print("PASS: independent kernel variables for two live agents", flush=True)
+
             owned = first.tool("mathematica_list_sessions")["sessions"]
             other = second.tool("mathematica_list_sessions")["sessions"]
             assert any(s["session_id"] == wolfram_id for s in owned)
+            assert all(s["session_id"] != second_id for s in owned)
+            assert any(s["session_id"] == second_id for s in other)
             assert all(s["session_id"] != wolfram_id for s in other)
             print("PASS: clients see only their own sessions", flush=True)
+
+            try:
+                first.tool("mathematica_create_session")
+            except RuntimeError as exc:
+                assert "kernel limit" in str(exc).lower(), exc
+            else:
+                raise AssertionError("global two-kernel limit was not enforced")
+            print("PASS: shared kernel capacity limit", flush=True)
 
             try:
                 second.tool("mathematica_execute_code", session_id=wolfram_id, code="1+1")
@@ -174,8 +197,15 @@ def run(executable: str) -> None:
 
             first.tool("mathematica_close_session", session_id=wolfram_id)
             wolfram_id = None
-            print("PASS: first agent closed its Wolfram session", flush=True)
+            second.tool("mathematica_close_session", session_id=second_id)
+            second_id = None
+            print("PASS: both agents closed their Wolfram sessions", flush=True)
         finally:
+            if second_id and proc.poll() is None:
+                try:
+                    second.tool("mathematica_close_session", session_id=second_id)
+                except Exception as exc:
+                    print(f"WARN: second kernel cleanup failed: {exc}", file=sys.stderr)
             if wolfram_id and proc.poll() is None:
                 try:
                     first.tool("mathematica_close_session", session_id=wolfram_id)
