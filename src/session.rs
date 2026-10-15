@@ -72,10 +72,6 @@ pub struct SessionInfo {
 }
 
 impl SessionManager {
-  pub fn new() -> Self {
-    Self::new_with_limit(None)
-  }
-
   pub fn new_with_limit(max_kernels: Option<usize>) -> Self {
     let signer = SessionIdSigner::new();
     let inner = Arc::new(Mutex::new(HashMap::new()));
